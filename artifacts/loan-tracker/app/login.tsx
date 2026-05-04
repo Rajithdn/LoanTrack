@@ -29,17 +29,23 @@ export default function LoginScreen() {
   const [error, setError] = useState("");
 
   const handleLogin = async () => {
-    if (!email.trim() || !password) { setError("Please fill all fields"); return; }
+    if (!email.trim() || !password) {
+      setError("Please enter your email and password.");
+      return;
+    }
     setError("");
     setLoading(true);
     try {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       const profile = await signIn(email.trim(), password);
       setUser(profile);
-      if (profile.role === "admin") router.replace("/(admin)/dashboard");
-      else router.replace("/(user)/dashboard");
+      if (profile.role === "admin") {
+        router.replace("/(admin)/dashboard");
+      } else {
+        router.replace("/(user)/dashboard");
+      }
     } catch (e: any) {
-      setError(e?.message?.includes("invalid") ? "Invalid email or password" : "Login failed. Try again.");
+      setError(e?.message ?? "Login failed. Please try again.");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setLoading(false);
@@ -49,8 +55,18 @@ export default function LoginScreen() {
   const topPad = Platform.OS === "web" ? 67 : insets.top;
 
   return (
-    <KeyboardAvoidingView style={[styles.flex, { backgroundColor: c.background }]} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-      <ScrollView contentContainerStyle={[styles.container, { paddingTop: topPad + 40, paddingBottom: insets.bottom + 40 }]} keyboardShouldPersistTaps="handled">
+    <KeyboardAvoidingView
+      style={[styles.flex, { backgroundColor: c.background }]}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
+      <ScrollView
+        contentContainerStyle={[
+          styles.container,
+          { paddingTop: topPad + 40, paddingBottom: insets.bottom + 40 },
+        ]}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* Logo */}
         <View style={styles.logoArea}>
           <View style={[styles.logoBox, { backgroundColor: c.primary }]}>
             <Feather name="trending-up" size={32} color="#fff" />
@@ -59,12 +75,22 @@ export default function LoginScreen() {
           <Text style={[styles.tagline, { color: c.mutedForeground }]}>Manage loans with clarity</Text>
         </View>
 
+        {/* Admin hint */}
+        <View style={[styles.hintBox, { backgroundColor: c.secondary, borderColor: c.border }]}>
+          <Feather name="info" size={14} color={c.primary} />
+          <View style={styles.hintText}>
+            <Text style={[styles.hintTitle, { color: c.foreground }]}>Admin credentials</Text>
+            <Text style={[styles.hintSub, { color: c.mutedForeground }]}>admin@gmail.com · Admin@07</Text>
+          </View>
+        </View>
+
+        {/* Card */}
         <View style={[styles.card, { backgroundColor: c.card, borderColor: c.border }]}>
           <Text style={[styles.heading, { color: c.foreground }]}>Welcome back</Text>
           <Text style={[styles.subheading, { color: c.mutedForeground }]}>Sign in to your account</Text>
 
           {error ? (
-            <View style={[styles.errorBox, { backgroundColor: c.destructive + "18" }]}>
+            <View style={[styles.errorBox, { backgroundColor: c.destructive + "18", borderColor: c.destructive + "40" }]}>
               <Feather name="alert-circle" size={14} color={c.destructive} />
               <Text style={[styles.errorText, { color: c.destructive }]}>{error}</Text>
             </View>
@@ -119,6 +145,14 @@ export default function LoginScreen() {
             <Text style={[styles.registerLink, { color: c.primary }]}>Create account</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Firebase setup note */}
+        <View style={[styles.setupNote, { backgroundColor: c.muted, borderColor: c.border }]}>
+          <Feather name="settings" size={12} color={c.mutedForeground} />
+          <Text style={[styles.setupText, { color: c.mutedForeground }]}>
+            Firebase setup required: Enable Email/Password auth and set Firestore rules to allow authenticated access.
+          </Text>
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -127,19 +161,30 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   container: { paddingHorizontal: 24 },
-  logoArea: { alignItems: "center", marginBottom: 32 },
+  logoArea: { alignItems: "center", marginBottom: 20 },
   logoBox: {
     width: 72, height: 72, borderRadius: 20,
     alignItems: "center", justifyContent: "center", marginBottom: 16,
-    shadowColor: "#1A56DB", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.35, shadowRadius: 16, elevation: 8,
+    shadowColor: "#1A56DB", shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35, shadowRadius: 16, elevation: 8,
   },
   appName: { fontSize: 28, fontFamily: "Inter_700Bold" },
   tagline: { fontSize: 14, fontFamily: "Inter_400Regular", marginTop: 4 },
+  hintBox: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    borderRadius: 12, borderWidth: 1, padding: 12, marginBottom: 16,
+  },
+  hintText: { flex: 1 },
+  hintTitle: { fontFamily: "Inter_600SemiBold", fontSize: 13 },
+  hintSub: { fontFamily: "Inter_400Regular", fontSize: 12, marginTop: 2 },
   card: { borderRadius: 20, padding: 24, borderWidth: 1, gap: 16 },
   heading: { fontSize: 22, fontFamily: "Inter_700Bold" },
   subheading: { fontSize: 14, fontFamily: "Inter_400Regular", marginTop: -8 },
-  errorBox: { flexDirection: "row", alignItems: "center", gap: 8, padding: 12, borderRadius: 10 },
-  errorText: { fontSize: 13, fontFamily: "Inter_500Medium", flex: 1 },
+  errorBox: {
+    flexDirection: "row", alignItems: "flex-start", gap: 8,
+    padding: 12, borderRadius: 10, borderWidth: 1,
+  },
+  errorText: { fontSize: 13, fontFamily: "Inter_500Medium", flex: 1, lineHeight: 18 },
   inputWrapper: {
     flexDirection: "row", alignItems: "center", gap: 10,
     borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 13,
@@ -147,7 +192,12 @@ const styles = StyleSheet.create({
   input: { flex: 1, fontSize: 15, fontFamily: "Inter_400Regular" },
   loginBtn: { borderRadius: 12, paddingVertical: 15, alignItems: "center", marginTop: 4 },
   loginBtnText: { color: "#fff", fontSize: 16, fontFamily: "Inter_600SemiBold" },
-  registerRow: { flexDirection: "row", justifyContent: "center", marginTop: 24 },
+  registerRow: { flexDirection: "row", justifyContent: "center", marginTop: 24, marginBottom: 16 },
   registerText: { fontSize: 14, fontFamily: "Inter_400Regular" },
   registerLink: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  setupNote: {
+    flexDirection: "row", alignItems: "flex-start", gap: 8,
+    padding: 12, borderRadius: 10, borderWidth: 1,
+  },
+  setupText: { flex: 1, fontSize: 11, fontFamily: "Inter_400Regular", lineHeight: 16 },
 });

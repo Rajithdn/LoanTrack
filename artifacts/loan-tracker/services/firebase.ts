@@ -1,5 +1,11 @@
 import { initializeApp, getApps } from "firebase/app";
-import { getAuth } from "firebase/auth";
+import {
+  initializeAuth,
+  browserLocalPersistence,
+  browserSessionPersistence,
+  inMemoryPersistence,
+  getAuth,
+} from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
@@ -13,8 +19,23 @@ const firebaseConfig = {
   measurementId: process.env.EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+let app = getApps()[0];
+if (!app) {
+  app = initializeApp(firebaseConfig);
+}
 
-export const auth = getAuth(app);
+// Use session persistence to avoid IndexedDB issues in embedded iframes.
+// Falls back to in-memory if session storage is also unavailable.
+let auth: ReturnType<typeof getAuth>;
+try {
+  auth = initializeAuth(app, {
+    persistence: [browserLocalPersistence, browserSessionPersistence, inMemoryPersistence],
+  });
+} catch {
+  // initializeAuth throws if auth was already initialized (e.g. hot reload)
+  auth = getAuth(app);
+}
+
+export { auth };
 export const db = getFirestore(app);
 export default app;

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "@/services/firebase";
 import { getUserProfile, type UserProfile } from "@/services/authService";
@@ -21,23 +21,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [firebaseUser, setFirebaseUser] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
+  const loadingResolved = useRef(false);
 
   useEffect(() => {
+    // Safety timeout: if onAuthStateChanged never fires (e.g. Firebase blocked),
+    // unblock the loading state after 8 seconds so the user can at least see the login screen.
+    const timeout = setTimeout(() => {
+      if (!loadingResolved.current) {
+        loadingResolved.current = true;
+        setLoading(false);
+      }
+    }, 8000);
+
     const unsub = onAuthStateChanged(auth, async (fbUser) => {
+      clearTimeout(timeout);
+      loadingResolved.current = true;
       setFirebaseUser(fbUser);
       if (fbUser) {
-        try {
-          const profile = await getUserProfile(fbUser.uid);
-          setUser(profile);
-        } catch {
-          setUser(null);
-        }
+        const profile = await getUserProfile(fbUser.uid);
+        setUser(profile);
       } else {
         setUser(null);
       }
       setLoading(false);
     });
-    return unsub;
+
+    return () => {
+      clearTimeout(timeout);
+      unsub();
+    };
   }, []);
 
   return (

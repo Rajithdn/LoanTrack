@@ -3,15 +3,10 @@ import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { router } from "expo-router";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
-import { seedAdmin } from "@/services/authService";
 
 export default function IndexScreen() {
   const { user, loading } = useAuth();
   const c = useColors();
-
-  useEffect(() => {
-    seedAdmin().catch(() => {});
-  }, []);
 
   useEffect(() => {
     if (loading) return;

@@ -30,8 +30,14 @@ export default function RegisterScreen() {
   const [error, setError] = useState("");
 
   const handleRegister = async () => {
-    if (!name.trim() || !email.trim() || !password) { setError("Please fill all fields"); return; }
-    if (password.length < 6) { setError("Password must be at least 6 characters"); return; }
+    if (!name.trim() || !email.trim() || !password) {
+      setError("Please fill all fields.");
+      return;
+    }
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters.");
+      return;
+    }
     setError("");
     setLoading(true);
     try {
@@ -40,9 +46,7 @@ export default function RegisterScreen() {
       setUser(profile);
       router.replace("/(user)/dashboard");
     } catch (e: any) {
-      const msg = e?.message ?? "";
-      if (msg.includes("email-already-in-use")) setError("This email is already registered");
-      else setError("Registration failed. Please try again.");
+      setError(e?.message ?? "Registration failed. Please try again.");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setLoading(false);
@@ -52,54 +56,82 @@ export default function RegisterScreen() {
   const topPad = Platform.OS === "web" ? 67 : insets.top;
 
   return (
-    <KeyboardAvoidingView style={[styles.flex, { backgroundColor: c.background }]} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-      <ScrollView contentContainerStyle={[styles.container, { paddingTop: topPad + 32, paddingBottom: insets.bottom + 40 }]} keyboardShouldPersistTaps="handled">
+    <KeyboardAvoidingView
+      style={[styles.flex, { backgroundColor: c.background }]}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
+      <ScrollView
+        contentContainerStyle={[
+          styles.container,
+          { paddingTop: topPad + 32, paddingBottom: insets.bottom + 40 },
+        ]}
+        keyboardShouldPersistTaps="handled"
+      >
         <TouchableOpacity onPress={() => router.back()} style={styles.back}>
           <Feather name="arrow-left" size={22} color={c.foreground} />
         </TouchableOpacity>
 
         <Text style={[styles.heading, { color: c.foreground }]}>Create Account</Text>
-        <Text style={[styles.subheading, { color: c.mutedForeground }]}>Start tracking your loan today</Text>
+        <Text style={[styles.subheading, { color: c.mutedForeground }]}>
+          Register as a borrower to track your loan
+        </Text>
 
         <View style={[styles.card, { backgroundColor: c.card, borderColor: c.border }]}>
           {error ? (
-            <View style={[styles.errorBox, { backgroundColor: c.destructive + "18" }]}>
+            <View style={[styles.errorBox, { backgroundColor: c.destructive + "18", borderColor: c.destructive + "40" }]}>
               <Feather name="alert-circle" size={14} color={c.destructive} />
               <Text style={[styles.errorText, { color: c.destructive }]}>{error}</Text>
             </View>
           ) : null}
 
-          {([
-            { icon: "user", placeholder: "Full name", value: name, onChange: setName, secure: false, type: "default" },
-            { icon: "mail", placeholder: "Email address", value: email, onChange: setEmail, secure: false, type: "email-address" },
-          ] as const).map((field, i) => (
-            <View key={i} style={[styles.inputWrapper, { borderColor: c.border, backgroundColor: c.muted }]}>
-              <Feather name={field.icon as any} size={16} color={c.mutedForeground} />
+          <View style={styles.fieldGroup}>
+            <Text style={[styles.fieldLabel, { color: c.mutedForeground }]}>Full Name</Text>
+            <View style={[styles.inputWrapper, { borderColor: c.border, backgroundColor: c.muted }]}>
+              <Feather name="user" size={16} color={c.mutedForeground} />
               <TextInput
                 style={[styles.input, { color: c.foreground }]}
-                placeholder={field.placeholder}
+                placeholder="Enter your full name"
                 placeholderTextColor={c.mutedForeground}
-                value={field.value}
-                onChangeText={field.onChange}
-                keyboardType={field.type as any}
-                autoCapitalize={field.type === "email-address" ? "none" : "words"}
+                value={name}
+                onChangeText={setName}
+                autoCapitalize="words"
               />
             </View>
-          ))}
+          </View>
 
-          <View style={[styles.inputWrapper, { borderColor: c.border, backgroundColor: c.muted }]}>
-            <Feather name="lock" size={16} color={c.mutedForeground} />
-            <TextInput
-              style={[styles.input, { color: c.foreground }]}
-              placeholder="Password (min 6 chars)"
-              placeholderTextColor={c.mutedForeground}
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry={!showPass}
-            />
-            <TouchableOpacity onPress={() => setShowPass(!showPass)}>
-              <Feather name={showPass ? "eye-off" : "eye"} size={16} color={c.mutedForeground} />
-            </TouchableOpacity>
+          <View style={styles.fieldGroup}>
+            <Text style={[styles.fieldLabel, { color: c.mutedForeground }]}>Email Address</Text>
+            <View style={[styles.inputWrapper, { borderColor: c.border, backgroundColor: c.muted }]}>
+              <Feather name="mail" size={16} color={c.mutedForeground} />
+              <TextInput
+                style={[styles.input, { color: c.foreground }]}
+                placeholder="Enter your email"
+                placeholderTextColor={c.mutedForeground}
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+            </View>
+          </View>
+
+          <View style={styles.fieldGroup}>
+            <Text style={[styles.fieldLabel, { color: c.mutedForeground }]}>Password</Text>
+            <View style={[styles.inputWrapper, { borderColor: c.border, backgroundColor: c.muted }]}>
+              <Feather name="lock" size={16} color={c.mutedForeground} />
+              <TextInput
+                style={[styles.input, { color: c.foreground }]}
+                placeholder="Min 6 characters"
+                placeholderTextColor={c.mutedForeground}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPass}
+              />
+              <TouchableOpacity onPress={() => setShowPass(!showPass)}>
+                <Feather name={showPass ? "eye-off" : "eye"} size={16} color={c.mutedForeground} />
+              </TouchableOpacity>
+            </View>
           </View>
 
           <TouchableOpacity
@@ -108,7 +140,11 @@ export default function RegisterScreen() {
             disabled={loading}
             activeOpacity={0.85}
           >
-            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.registerBtnText}>Create Account</Text>}
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.registerBtnText}>Create Account</Text>
+            )}
           </TouchableOpacity>
         </View>
 
@@ -130,8 +166,13 @@ const styles = StyleSheet.create({
   heading: { fontSize: 28, fontFamily: "Inter_700Bold", marginBottom: 6 },
   subheading: { fontSize: 15, fontFamily: "Inter_400Regular", marginBottom: 28 },
   card: { borderRadius: 20, padding: 24, borderWidth: 1, gap: 16 },
-  errorBox: { flexDirection: "row", alignItems: "center", gap: 8, padding: 12, borderRadius: 10 },
-  errorText: { fontSize: 13, fontFamily: "Inter_500Medium", flex: 1 },
+  errorBox: {
+    flexDirection: "row", alignItems: "flex-start", gap: 8,
+    padding: 12, borderRadius: 10, borderWidth: 1,
+  },
+  errorText: { fontSize: 13, fontFamily: "Inter_500Medium", flex: 1, lineHeight: 18 },
+  fieldGroup: { gap: 6 },
+  fieldLabel: { fontSize: 13, fontFamily: "Inter_500Medium" },
   inputWrapper: {
     flexDirection: "row", alignItems: "center", gap: 10,
     borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 13,
