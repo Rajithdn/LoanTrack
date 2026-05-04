@@ -1,9 +1,9 @@
 import React from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { Feather } from "@expo/vector-icons";
+import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useColors } from "@/hooks/useColors";
 import { StatusBadge } from "./StatusBadge";
-import type { Payment } from "@/services/paymentService";
+import type { Payment, PaymentMode } from "@/services/paymentService";
 
 interface PaymentItemProps {
   payment: Payment;
@@ -13,21 +13,62 @@ interface PaymentItemProps {
   loanAmount?: string;
 }
 
+const MODE_META: Record<PaymentMode, { icon: string; color: string; bg: string }> = {
+  PhonePe:        { icon: "cellphone",        color: "#7B3FE4", bg: "#7B3FE418" },
+  "Google Pay":   { icon: "google",           color: "#4285F4", bg: "#4285F418" },
+  Cash:           { icon: "cash",             color: "#00C896", bg: "#00C89618" },
+  "Bank Transfer":{ icon: "bank",             color: "#F59E0B", bg: "#F59E0B18" },
+};
+
 export function PaymentItem({ payment, onConfirm, onReject, userName, loanAmount }: PaymentItemProps) {
   const c = useColors();
   const date = new Date(payment.date);
   const formatted = date.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  const confirmedDate = payment.confirmedAt
+    ? new Date(payment.confirmedAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+    : null;
+
+  const modeMeta = payment.paymentMode ? MODE_META[payment.paymentMode] : null;
 
   return (
     <View style={[styles.item, { backgroundColor: c.card, borderColor: c.border }]}>
       <View style={styles.row}>
-        <View style={[styles.iconBox, { backgroundColor: c.primary + "15" }]}>
-          <Feather name="credit-card" size={18} color={c.primary} />
+        <View style={[styles.iconBox, modeMeta ? { backgroundColor: modeMeta.bg } : { backgroundColor: c.primary + "15" }]}>
+          {modeMeta ? (
+            <MaterialCommunityIcons name={modeMeta.icon as any} size={20} color={modeMeta.color} />
+          ) : (
+            <Feather name="credit-card" size={18} color={c.primary} />
+          )}
         </View>
         <View style={styles.info}>
-          {userName ? <Text style={[styles.name, { color: c.mutedForeground }]}>{userName}</Text> : null}
+          {userName ? (
+            <Text style={[styles.name, { color: c.mutedForeground }]}>{userName}</Text>
+          ) : null}
           <Text style={[styles.amount, { color: c.foreground }]}>₹{payment.amount.toLocaleString()}</Text>
-          <Text style={[styles.date, { color: c.mutedForeground }]}>{formatted}</Text>
+          <View style={styles.metaRow}>
+            <Text style={[styles.date, { color: c.mutedForeground }]}>{formatted}</Text>
+            {payment.paymentMode ? (
+              <>
+                <Text style={[styles.dot, { color: c.mutedForeground }]}>·</Text>
+                <Text style={[styles.modeTag, { color: modeMeta?.color ?? c.primary }]}>
+                  {payment.paymentMode}
+                </Text>
+              </>
+            ) : null}
+          </View>
+          {loanAmount ? (
+            <Text style={[styles.loanRef, { color: c.mutedForeground }]}>Loan: {loanAmount}</Text>
+          ) : null}
+          {payment.note ? (
+            <Text style={[styles.note, { color: c.mutedForeground }]} numberOfLines={1}>
+              Note: {payment.note}
+            </Text>
+          ) : null}
+          {confirmedDate && payment.updatedBy ? (
+            <Text style={[styles.confirmedBy, { color: c.mutedForeground }]}>
+              Confirmed {confirmedDate} by {payment.updatedBy}
+            </Text>
+          ) : null}
         </View>
         <StatusBadge status={payment.status} />
       </View>
@@ -45,11 +86,11 @@ export function PaymentItem({ payment, onConfirm, onReject, userName, loanAmount
           )}
           {onConfirm && (
             <TouchableOpacity
-              style={[styles.btn, styles.confirmBtn, { backgroundColor: c.success, borderColor: c.success }]}
+              style={[styles.btn, styles.confirmBtn, { backgroundColor: c.success }]}
               onPress={onConfirm}
             >
               <Feather name="check" size={14} color="#fff" />
-              <Text style={[styles.btnText, { color: "#fff" }]}>Confirm</Text>
+              <Text style={[styles.btnText, { color: "#fff" }]}>Confirm Payment</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -59,36 +100,24 @@ export function PaymentItem({ payment, onConfirm, onReject, userName, loanAmount
 }
 
 const styles = StyleSheet.create({
-  item: {
-    borderRadius: 12,
-    padding: 14,
-    borderWidth: 1,
-    marginBottom: 10,
-    gap: 12,
-  },
-  row: { flexDirection: "row", alignItems: "center", gap: 12 },
-  iconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  item: { borderRadius: 14, padding: 14, borderWidth: 1, marginBottom: 10, gap: 12 },
+  row: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
+  iconBox: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   info: { flex: 1 },
-  name: { fontSize: 11, fontFamily: "Inter_400Regular", marginBottom: 2 },
-  amount: { fontSize: 16, fontFamily: "Inter_700Bold" },
-  date: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 1 },
+  name: { fontSize: 11, fontFamily: "Inter_500Medium", marginBottom: 2 },
+  amount: { fontSize: 17, fontFamily: "Inter_700Bold" },
+  metaRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 },
+  date: { fontSize: 12, fontFamily: "Inter_400Regular" },
+  dot: { fontSize: 12 },
+  modeTag: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  loanRef: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
+  note: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2, fontStyle: "italic" },
+  confirmedBy: { fontSize: 10, fontFamily: "Inter_400Regular", marginTop: 2 },
   actions: { flexDirection: "row", gap: 8 },
   btn: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
+    flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center",
+    gap: 6, paddingVertical: 9, borderRadius: 10, borderWidth: 1,
   },
-  confirmBtn: {},
+  confirmBtn: { borderWidth: 0 },
   btnText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
 });

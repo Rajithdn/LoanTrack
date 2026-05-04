@@ -18,14 +18,28 @@ export async function getAllUsers(): Promise<UserProfile[]> {
   return snap.docs.map((d) => d.data() as UserProfile);
 }
 
-export async function addUser(name: string, email: string, password: string): Promise<UserProfile> {
+export async function addUser(
+  name: string,
+  email: string,
+  password: string,
+  phone?: string
+): Promise<UserProfile> {
   const cred = await createUserWithEmailAndPassword(auth, email, password);
-  const profile: UserProfile = { id: cred.user.uid, name, email, role: "user" };
+  const profile: UserProfile = {
+    id: cred.user.uid,
+    name,
+    email,
+    phone: phone ?? "",
+    role: "user",
+  };
   await setDoc(doc(db, "users", cred.user.uid), profile);
   return profile;
 }
 
-export async function updateUser(id: string, data: Partial<Pick<UserProfile, "name" | "email">>): Promise<void> {
+export async function updateUser(
+  id: string,
+  data: Partial<Pick<UserProfile, "name" | "email" | "phone">>
+): Promise<void> {
   await updateDoc(doc(db, "users", id), data);
 }
 

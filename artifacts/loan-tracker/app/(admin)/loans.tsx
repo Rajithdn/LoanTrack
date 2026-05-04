@@ -15,7 +15,7 @@ import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
-import { getAllLoans, addLoan, calculateEMI } from "@/services/loanService";
+import { getAllLoans, addLoan, calculateEMI, calculateLoanBreakdown } from "@/services/loanService";
 import { getAllUsers } from "@/services/userService";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { UserProfile } from "@/services/authService";
@@ -45,10 +45,12 @@ export default function LoansScreen() {
 
   const filtered = loans.filter((l) => filter === "all" || l.status === filter);
 
-  const emi = form.amount && form.interest && form.duration
-    ? calculateEMI(parseFloat(form.amount), parseFloat(form.interest), parseInt(form.duration))
+  const breakdown = form.amount && form.interest && form.duration
+    ? calculateLoanBreakdown(parseFloat(form.amount), parseFloat(form.interest), parseInt(form.duration))
     : null;
-  const total = emi && form.duration ? Math.round(emi * parseInt(form.duration) * 100) / 100 : null;
+  const emi = breakdown?.emi ?? null;
+  const total = breakdown?.totalAmount ?? null;
+  const interestAmt = breakdown?.interestAmount ?? null;
 
   const handleAdd = async () => {
     if (!selectedUser) { setFormError("Select a borrower"); return; }
@@ -172,9 +174,9 @@ export default function LoansScreen() {
                   <Text style={[styles.calcValue, { color: c.foreground }]}>₹{total.toLocaleString()}</Text>
                 </View>
                 <View style={styles.calcRow}>
-                  <Text style={[styles.calcLabel, { color: c.mutedForeground }]}>Total Interest</Text>
+                  <Text style={[styles.calcLabel, { color: c.mutedForeground }]}>Interest Amount</Text>
                   <Text style={[styles.calcValue, { color: c.warning }]}>
-                    ₹{(total - parseFloat(form.amount)).toFixed(2)}
+                    ₹{interestAmt?.toLocaleString() ?? "0"}
                   </Text>
                 </View>
               </View>

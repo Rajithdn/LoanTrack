@@ -5,6 +5,7 @@ import {
   Platform,
   RefreshControl,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Switch,
   Text,
@@ -12,8 +13,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Feather } from "@expo/vector-icons";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import { useColors } from "@/hooks/useColors";
@@ -21,10 +22,18 @@ import { useTheme } from "@/context/ThemeContext";
 import { useAuth } from "@/context/AuthContext";
 import { getLoansByUser } from "@/services/loanService";
 import { submitPayment } from "@/services/paymentService";
+import { getNotificationsForUser, markAllRead } from "@/services/notificationService";
 import { signOut } from "@/services/authService";
 import { NotificationBanner } from "@/components/NotificationBanner";
 import { StatusBadge } from "@/components/StatusBadge";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import type { PaymentMode } from "@/services/paymentService";
+
+const PAYMENT_MODES: { mode: PaymentMode; icon: string; color: string; bg: string; label: string }[] = [
+  { mode: "PhonePe",    icon: "cellphone", color: "#7B3FE4", bg: "#7B3FE422", label: "PhonePe" },
+  { mode: "Google Pay", icon: "google",    color: "#4285F4", bg: "#4285F422", label: "GPay" },
+  { mode: "Cash",       icon: "cash",      color: "#00C896", bg: "#00C89622", label: "Cash" },
+];
 
 export default function UserDashboard() {
   const c = useColors();
@@ -32,9 +41,12 @@ export default function UserDashboard() {
   const { user, setUser } = useAuth();
   const insets = useSafeAreaInsets();
   const qc = useQueryClient();
+
   const [payModal, setPayModal] = useState(false);
   const [payAmount, setPayAmount] = useState("");
+  const [payMode, setPayMode] = useState<PaymentMode>("Cash");
   const [payError, setPayError] = useState("");
+  const [notifPanel, setNotifPanel] = useState(false);
   const [notification, setNotification] = useState<{ msg: string; type: "success" | "error" | "info" } | null>(null);
 
   const { data: loans = [], isLoading, refetch } = useQuery({
@@ -43,16 +55,24 @@ export default function UserDashboard() {
     enabled: !!user,
   });
 
-  const loan = loans[0]; // Primary loan
+  const { data: notifications = [], refetch: refetchNotifs } = useQuery({
+    queryKey: ["notifications", user?.id],
+    queryFn: () => getNotificationsForUser(user!.id),
+    enabled: !!user,
+    refetchInterval: 30000,
+  });
+
+  const loan = loans[0];
+  const unreadCount = notifications.filter((n) => !n.read).length;
 
   const payMutation = useMutation({
     mutationFn: ({ loanId, amount }: { loanId: string; amount: number }) =>
-      submitPayment(loanId, user!.id, amount),
+      submitPayment(loanId, user!.id, amount, payMode),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["userPayments", user?.id] });
       setPayModal(false);
       setPayAmount("");
-      setNotification({ msg: "Payment submitted! Awaiting admin confirmation.", type: "info" });
+      setNotification({ msg: `Payment submitted via ${payMode}! Awaiting admin confirmation.`, type: "info" });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     },
     onError: () => setPayError("Failed to submit payment. Try again."),
@@ -73,18 +93,27 @@ export default function UserDashboard() {
     router.replace("/login");
   };
 
-  const progress = loan ? (loan.paidAmount / loan.totalAmount) : 0;
+  const openNotifications = useCallback(async () => {
+    setNotifPanel(true);
+    if (unreadCount > 0 && user) {
+      await markAllRead(user.id).catch(() => {});
+      refetchNotifs();
+    }
+  }, [unreadCount, user, refetchNotifs]);
+
+  const onRefresh = useCallback(async () => {
+    await Promise.all([refetch(), refetchNotifs()]);
+  }, [refetch, refetchNotifs]);
+
+  const progress = loan ? Math.min(loan.paidAmount / loan.totalAmount, 1) : 0;
   const paidMonths = loan ? Math.round(progress * loan.duration) : 0;
   const remainingMonths = loan ? loan.duration - paidMonths : 0;
-
-  // Next due date
   const nextDue = loan ? (() => {
     const start = new Date(loan.startDate);
-    const nextMonth = new Date(start.getFullYear(), start.getMonth() + paidMonths + 1, start.getDate());
-    return nextMonth.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+    const next = new Date(start.getFullYear(), start.getMonth() + paidMonths + 1, start.getDate());
+    return next.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
   })() : null;
 
-  const topPad = Platform.OS === "web" ? 67 : insets.top;
   const bottomPad = Platform.OS === "web" ? 34 : insets.bottom;
 
   if (isLoading) return (
@@ -94,7 +123,9 @@ export default function UserDashboard() {
   );
 
   return (
-    <View style={[styles.flex, { backgroundColor: c.background }]}>
+    <SafeAreaView style={[styles.flex, { backgroundColor: c.background }]} edges={["top"]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={c.background} />
+
       {notification && (
         <NotificationBanner
           message={notification.msg}
@@ -105,16 +136,34 @@ export default function UserDashboard() {
       )}
 
       <ScrollView
-        contentContainerStyle={{ paddingTop: topPad + 16, paddingBottom: bottomPad + 90, paddingHorizontal: 20 }}
-        refreshControl={<RefreshControl refreshing={false} onRefresh={refetch} tintColor={c.primary} />}
+        contentContainerStyle={[styles.container, { paddingBottom: bottomPad + 90 }]}
+        refreshControl={<RefreshControl refreshing={false} onRefresh={onRefresh} tintColor={c.primary} />}
+        showsVerticalScrollIndicator={false}
       >
         {/* Header */}
         <View style={styles.headerRow}>
           <View>
-            <Text style={[styles.greeting, { color: c.mutedForeground }]}>Welcome back</Text>
+            <Text style={[styles.greeting, { color: c.mutedForeground }]}>Welcome back 👋</Text>
             <Text style={[styles.name, { color: c.foreground }]}>{user?.name?.split(" ")[0]}</Text>
+            {user?.phone ? (
+              <View style={styles.phoneRow}>
+                <Feather name="phone" size={11} color={c.mutedForeground} />
+                <Text style={[styles.phoneTxt, { color: c.mutedForeground }]}>+91 {user.phone}</Text>
+              </View>
+            ) : null}
           </View>
-          <View style={styles.headerRight}>
+          <View style={styles.headerActions}>
+            <TouchableOpacity
+              style={[styles.iconBtn, { backgroundColor: c.muted }]}
+              onPress={openNotifications}
+            >
+              <Feather name="bell" size={18} color={unreadCount > 0 ? c.primary : c.mutedForeground} />
+              {unreadCount > 0 && (
+                <View style={[styles.badge, { backgroundColor: c.destructive }]}>
+                  <Text style={styles.badgeText}>{unreadCount > 9 ? "9+" : unreadCount}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
             <View style={styles.themeRow}>
               <Feather name={isDark ? "moon" : "sun"} size={15} color={c.mutedForeground} />
               <Switch value={isDark} onValueChange={toggleTheme}
@@ -122,7 +171,7 @@ export default function UserDashboard() {
                 thumbColor={isDark ? c.primary : c.mutedForeground}
               />
             </View>
-            <TouchableOpacity onPress={handleSignOut} style={[styles.signOutBtn, { backgroundColor: c.muted }]}>
+            <TouchableOpacity onPress={handleSignOut} style={[styles.iconBtn, { backgroundColor: c.muted }]}>
               <Feather name="log-out" size={16} color={c.mutedForeground} />
             </TouchableOpacity>
           </View>
@@ -140,18 +189,16 @@ export default function UserDashboard() {
             <View style={[styles.heroCard, { backgroundColor: c.primary }]}>
               <View style={styles.heroTop}>
                 <View>
-                  <Text style={styles.heroLabel}>Loan Amount</Text>
+                  <Text style={styles.heroLabel}>Total Loan Amount</Text>
                   <Text style={styles.heroAmount}>₹{loan.amount.toLocaleString()}</Text>
                 </View>
                 <StatusBadge status={loan.status} size="md" />
               </View>
-
               <View style={styles.heroDivider} />
-
               <View style={styles.heroRow}>
                 <View style={styles.heroStat}>
                   <Text style={styles.heroStatLabel}>Interest</Text>
-                  <Text style={styles.heroStatValue}>{loan.interest}% p.a.</Text>
+                  <Text style={styles.heroStatValue}>{loan.interest}% → ₹{(loan.interestAmount ?? 0).toLocaleString()}</Text>
                 </View>
                 <View style={styles.heroStat}>
                   <Text style={styles.heroStatLabel}>EMI</Text>
@@ -159,12 +206,37 @@ export default function UserDashboard() {
                 </View>
                 <View style={styles.heroStat}>
                   <Text style={styles.heroStatLabel}>Duration</Text>
-                  <Text style={styles.heroStatValue}>{loan.duration} months</Text>
+                  <Text style={styles.heroStatValue}>{loan.duration} mo</Text>
                 </View>
               </View>
             </View>
 
-            {/* Progress */}
+            {/* 3 Summary Cards */}
+            <View style={styles.summaryRow}>
+              <View style={[styles.summaryCard, { backgroundColor: c.card, borderColor: c.border }]}>
+                <View style={[styles.summaryIcon, { backgroundColor: c.primary + "15" }]}>
+                  <Feather name="credit-card" size={16} color={c.primary} />
+                </View>
+                <Text style={[styles.summaryVal, { color: c.foreground }]}>₹{loan.totalAmount.toLocaleString()}</Text>
+                <Text style={[styles.summaryLabel, { color: c.mutedForeground }]}>Total Payable</Text>
+              </View>
+              <View style={[styles.summaryCard, { backgroundColor: c.card, borderColor: c.border }]}>
+                <View style={[styles.summaryIcon, { backgroundColor: c.success + "20" }]}>
+                  <Feather name="check-circle" size={16} color={c.success} />
+                </View>
+                <Text style={[styles.summaryVal, { color: c.success }]}>₹{loan.paidAmount.toLocaleString()}</Text>
+                <Text style={[styles.summaryLabel, { color: c.mutedForeground }]}>Paid</Text>
+              </View>
+              <View style={[styles.summaryCard, { backgroundColor: c.card, borderColor: c.border }]}>
+                <View style={[styles.summaryIcon, { backgroundColor: c.warning + "20" }]}>
+                  <Feather name="clock" size={16} color={c.warning} />
+                </View>
+                <Text style={[styles.summaryVal, { color: c.warning }]}>₹{loan.pendingAmount.toLocaleString()}</Text>
+                <Text style={[styles.summaryLabel, { color: c.mutedForeground }]}>Pending</Text>
+              </View>
+            </View>
+
+            {/* Progress Card */}
             <View style={[styles.progressCard, { backgroundColor: c.card, borderColor: c.border }]}>
               <View style={styles.progressHeader}>
                 <Text style={[styles.progressTitle, { color: c.foreground }]}>Repayment Progress</Text>
@@ -174,18 +246,8 @@ export default function UserDashboard() {
                 <View style={[styles.progressFill, { width: `${Math.min(progress * 100, 100)}%` as any, backgroundColor: c.accent }]} />
               </View>
               <View style={styles.progressStats}>
-                <View style={styles.pStat}>
-                  <Text style={[styles.pStatVal, { color: c.success }]}>₹{loan.paidAmount.toLocaleString()}</Text>
-                  <Text style={[styles.pStatLabel, { color: c.mutedForeground }]}>Paid</Text>
-                </View>
-                <View style={styles.pStat}>
-                  <Text style={[styles.pStatVal, { color: c.warning }]}>₹{loan.pendingAmount.toLocaleString()}</Text>
-                  <Text style={[styles.pStatLabel, { color: c.mutedForeground }]}>Remaining</Text>
-                </View>
-                <View style={styles.pStat}>
-                  <Text style={[styles.pStatVal, { color: c.foreground }]}>{paidMonths}/{loan.duration}</Text>
-                  <Text style={[styles.pStatLabel, { color: c.mutedForeground }]}>Months</Text>
-                </View>
+                <Text style={[styles.pStat, { color: c.mutedForeground }]}>{paidMonths} months paid</Text>
+                <Text style={[styles.pStat, { color: c.mutedForeground }]}>{remainingMonths} months left</Text>
               </View>
             </View>
 
@@ -197,22 +259,35 @@ export default function UserDashboard() {
                 <Text style={[styles.infoValue, { color: c.foreground }]}>{nextDue}</Text>
               </View>
               <View style={[styles.infoCard, { backgroundColor: c.card, borderColor: c.border }]}>
-                <Feather name="clock" size={18} color={c.warning} />
+                <Feather name="trending-down" size={18} color={c.warning} />
                 <Text style={[styles.infoLabel, { color: c.mutedForeground }]}>Remaining</Text>
                 <Text style={[styles.infoValue, { color: c.foreground }]}>{remainingMonths} months</Text>
               </View>
             </View>
 
-            {/* Pay EMI Button */}
+            {/* Pay EMI */}
             {loan.status === "active" && (
-              <TouchableOpacity
-                style={[styles.payBtn, { backgroundColor: c.accent }]}
-                onPress={() => { setPayModal(true); setPayAmount(String(loan.emi)); setPayError(""); }}
-                activeOpacity={0.85}
-              >
-                <Feather name="credit-card" size={20} color="#fff" />
-                <Text style={styles.payBtnText}>Pay EMI</Text>
-              </TouchableOpacity>
+              <>
+                <Text style={[styles.sectionTitle, { color: c.foreground }]}>Pay EMI via</Text>
+                <View style={styles.payModesRow}>
+                  {PAYMENT_MODES.map((m) => (
+                    <TouchableOpacity
+                      key={m.mode}
+                      style={[styles.payModeCard, { backgroundColor: m.bg, borderColor: m.color + "60" }]}
+                      onPress={() => {
+                        setPayMode(m.mode);
+                        setPayAmount(String(loan.emi));
+                        setPayError("");
+                        setPayModal(true);
+                      }}
+                      activeOpacity={0.8}
+                    >
+                      <MaterialCommunityIcons name={m.icon as any} size={26} color={m.color} />
+                      <Text style={[styles.payModeName, { color: m.color }]}>{m.label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </>
             )}
 
             {loan.status === "completed" && (
@@ -234,17 +309,59 @@ export default function UserDashboard() {
               <Feather name="x" size={22} color={c.mutedForeground} />
             </TouchableOpacity>
           </View>
-          <View style={styles.modalBody}>
+          <ScrollView contentContainerStyle={styles.modalBody} keyboardShouldPersistTaps="handled">
+            {/* Selected Mode */}
+            <View style={[styles.selectedModeBox, { backgroundColor: c.secondary }]}>
+              <MaterialCommunityIcons
+                name={(PAYMENT_MODES.find((m) => m.mode === payMode)?.icon ?? "cash") as any}
+                size={24}
+                color={PAYMENT_MODES.find((m) => m.mode === payMode)?.color ?? c.primary}
+              />
+              <Text style={[styles.selectedModeText, { color: c.foreground }]}>
+                Paying via <Text style={{ fontFamily: "Inter_700Bold", color: PAYMENT_MODES.find((m) => m.mode === payMode)?.color }}>
+                  {payMode}
+                </Text>
+              </Text>
+            </View>
+
+            {/* Switch Mode */}
+            <Text style={[styles.switchLabel, { color: c.mutedForeground }]}>Switch payment method:</Text>
+            <View style={styles.switchModes}>
+              {PAYMENT_MODES.map((m) => (
+                <TouchableOpacity
+                  key={m.mode}
+                  style={[styles.switchModeBtn,
+                    { backgroundColor: payMode === m.mode ? m.color : c.muted,
+                      borderColor: payMode === m.mode ? m.color : c.border }
+                  ]}
+                  onPress={() => setPayMode(m.mode)}
+                >
+                  <MaterialCommunityIcons name={m.icon as any} size={16} color={payMode === m.mode ? "#fff" : c.mutedForeground} />
+                  <Text style={[styles.switchModeText, { color: payMode === m.mode ? "#fff" : c.mutedForeground }]}>
+                    {m.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
             {loan && (
               <View style={[styles.emiHint, { backgroundColor: c.muted }]}>
                 <Text style={[styles.emiHintText, { color: c.mutedForeground }]}>Monthly EMI: </Text>
                 <Text style={[styles.emiHintVal, { color: c.foreground }]}>₹{loan.emi.toLocaleString()}</Text>
               </View>
             )}
-            {payError ? <Text style={[styles.formError, { color: c.destructive }]}>{payError}</Text> : null}
+
+            {payError ? (
+              <View style={[styles.errBox, { backgroundColor: c.destructive + "15" }]}>
+                <Feather name="alert-circle" size={14} color={c.destructive} />
+                <Text style={[styles.errText, { color: c.destructive }]}>{payError}</Text>
+              </View>
+            ) : null}
+
             <View style={styles.fieldGroup}>
               <Text style={[styles.fieldLabel, { color: c.mutedForeground }]}>Payment Amount (₹)</Text>
               <View style={[styles.inputWrapper, { borderColor: c.border, backgroundColor: c.muted }]}>
+                <Text style={[styles.rupee, { color: c.mutedForeground }]}>₹</Text>
                 <TextInput
                   style={[styles.input, { color: c.foreground }]}
                   value={payAmount}
@@ -255,12 +372,14 @@ export default function UserDashboard() {
                 />
               </View>
             </View>
+
             <View style={[styles.noteBox, { backgroundColor: c.warning + "18" }]}>
               <Feather name="info" size={14} color={c.warning} />
               <Text style={[styles.noteText, { color: c.warning }]}>
-                Payment will be marked as pending until confirmed by admin.
+                Payment stays pending until admin confirms it.
               </Text>
             </View>
+
             <TouchableOpacity
               style={[styles.saveBtn, { backgroundColor: c.accent }, payMutation.isPending && { opacity: 0.7 }]}
               onPress={handlePay}
@@ -274,66 +393,156 @@ export default function UserDashboard() {
                 </>
               )}
             </TouchableOpacity>
-          </View>
+          </ScrollView>
         </View>
       </Modal>
-    </View>
+
+      {/* Notifications Panel */}
+      <Modal visible={notifPanel} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setNotifPanel(false)}>
+        <View style={[styles.modalContent, { backgroundColor: c.background }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: c.border }]}>
+            <Text style={[styles.modalTitle, { color: c.foreground }]}>Notifications</Text>
+            <TouchableOpacity onPress={() => setNotifPanel(false)}>
+              <Feather name="x" size={22} color={c.mutedForeground} />
+            </TouchableOpacity>
+          </View>
+          <ScrollView contentContainerStyle={styles.notifList}>
+            {notifications.length === 0 ? (
+              <View style={styles.notifEmpty}>
+                <Feather name="bell-off" size={36} color={c.mutedForeground} />
+                <Text style={[styles.notifEmptyText, { color: c.mutedForeground }]}>No notifications yet</Text>
+              </View>
+            ) : notifications.map((n) => (
+              <View
+                key={n.id}
+                style={[styles.notifItem, {
+                  backgroundColor: n.read ? c.card : c.primary + "10",
+                  borderColor: n.read ? c.border : c.primary + "30",
+                }]}
+              >
+                <View style={[styles.notifIconBox, {
+                  backgroundColor: n.type === "alert" ? c.destructive + "20" : c.success + "20",
+                }]}>
+                  <Feather
+                    name={n.type === "alert" ? "alert-circle" : "check-circle"}
+                    size={16}
+                    color={n.type === "alert" ? c.destructive : c.success}
+                  />
+                </View>
+                <View style={styles.notifInfo}>
+                  <Text style={[styles.notifMsg, { color: c.foreground }]}>{n.message}</Text>
+                  <Text style={[styles.notifTime, { color: c.mutedForeground }]}>
+                    {new Date(n.timestamp).toLocaleDateString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+                  </Text>
+                </View>
+                {!n.read && <View style={[styles.unreadDot, { backgroundColor: c.primary }]} />}
+              </View>
+            ))}
+          </ScrollView>
+        </View>
+      </Modal>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   loading: { flex: 1, alignItems: "center", justifyContent: "center" },
-  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 },
+  container: { padding: 16, paddingTop: 16 },
+  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 },
   greeting: { fontSize: 13, fontFamily: "Inter_400Regular" },
   name: { fontSize: 26, fontFamily: "Inter_700Bold" },
-  headerRight: { flexDirection: "row", alignItems: "center", gap: 12 },
+  phoneRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 3 },
+  phoneTxt: { fontSize: 11, fontFamily: "Inter_400Regular" },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: 10 },
+  iconBtn: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center", position: "relative" },
+  badge: { position: "absolute", top: -4, right: -4, width: 18, height: 18, borderRadius: 9, alignItems: "center", justifyContent: "center" },
+  badgeText: { color: "#fff", fontSize: 10, fontFamily: "Inter_700Bold" },
   themeRow: { flexDirection: "row", alignItems: "center", gap: 4 },
-  signOutBtn: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   noLoanCard: { borderRadius: 20, padding: 40, borderWidth: 1, alignItems: "center", gap: 12 },
   noLoanTitle: { fontSize: 20, fontFamily: "Inter_700Bold" },
   noLoanSub: { fontSize: 14, fontFamily: "Inter_400Regular", textAlign: "center" },
+  // Hero
   heroCard: { borderRadius: 20, padding: 22, marginBottom: 14 },
   heroTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18 },
   heroLabel: { color: "rgba(255,255,255,0.7)", fontSize: 12, fontFamily: "Inter_400Regular" },
-  heroAmount: { color: "#fff", fontSize: 34, fontFamily: "Inter_700Bold", marginTop: 4 },
+  heroAmount: { color: "#fff", fontSize: 32, fontFamily: "Inter_700Bold", marginTop: 4 },
   heroDivider: { height: 1, backgroundColor: "rgba(255,255,255,0.2)", marginBottom: 18 },
   heroRow: { flexDirection: "row", justifyContent: "space-between" },
-  heroStat: { alignItems: "center" },
+  heroStat: { alignItems: "center", flex: 1 },
   heroStatLabel: { color: "rgba(255,255,255,0.6)", fontSize: 11, fontFamily: "Inter_400Regular" },
-  heroStatValue: { color: "#fff", fontSize: 14, fontFamily: "Inter_600SemiBold", marginTop: 3 },
+  heroStatValue: { color: "#fff", fontSize: 12, fontFamily: "Inter_600SemiBold", marginTop: 3, textAlign: "center" },
+  // 3-column summary cards
+  summaryRow: { flexDirection: "row", gap: 10, marginBottom: 14 },
+  summaryCard: {
+    flex: 1, borderRadius: 14, borderWidth: 1, padding: 12,
+    alignItems: "center", gap: 6,
+    shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2,
+  },
+  summaryIcon: { width: 34, height: 34, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  summaryVal: { fontSize: 13, fontFamily: "Inter_700Bold" },
+  summaryLabel: { fontSize: 10, fontFamily: "Inter_400Regular" },
+  // Progress
   progressCard: { borderRadius: 16, padding: 18, borderWidth: 1, marginBottom: 14, gap: 12 },
   progressHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   progressTitle: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
   progressPercent: { fontSize: 18, fontFamily: "Inter_700Bold" },
-  progressBg: { height: 8, borderRadius: 100 },
-  progressFill: { height: 8, borderRadius: 100 },
+  progressBg: { height: 10, borderRadius: 100 },
+  progressFill: { height: 10, borderRadius: 100 },
   progressStats: { flexDirection: "row", justifyContent: "space-between" },
-  pStat: { alignItems: "center" },
-  pStatVal: { fontSize: 14, fontFamily: "Inter_700Bold" },
-  pStatLabel: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
-  infoRow: { flexDirection: "row", gap: 12, marginBottom: 14 },
+  pStat: { fontSize: 12, fontFamily: "Inter_400Regular" },
+  // Info
+  infoRow: { flexDirection: "row", gap: 12, marginBottom: 20 },
   infoCard: { flex: 1, borderRadius: 14, padding: 14, borderWidth: 1, alignItems: "flex-start", gap: 6 },
   infoLabel: { fontSize: 11, fontFamily: "Inter_400Regular" },
   infoValue: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
-  payBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, padding: 16, borderRadius: 14, marginBottom: 8 },
-  payBtnText: { color: "#fff", fontSize: 16, fontFamily: "Inter_600SemiBold" },
+  // Payment mode cards
+  sectionTitle: { fontSize: 16, fontFamily: "Inter_600SemiBold", marginBottom: 12 },
+  payModesRow: { flexDirection: "row", gap: 12, marginBottom: 20 },
+  payModeCard: {
+    flex: 1, alignItems: "center", gap: 8, paddingVertical: 18, borderRadius: 16, borderWidth: 2,
+    shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 2,
+  },
+  payModeName: { fontSize: 12, fontFamily: "Inter_700Bold" },
+  // Completed
   completedBanner: { flexDirection: "row", alignItems: "center", gap: 10, padding: 16, borderRadius: 14 },
   completedText: { fontFamily: "Inter_600SemiBold", fontSize: 14 },
+  // Modal
   modalContent: { flex: 1 },
   modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 20, borderBottomWidth: 1 },
   modalTitle: { fontSize: 18, fontFamily: "Inter_700Bold" },
   modalBody: { padding: 24, gap: 16 },
+  selectedModeBox: { flexDirection: "row", alignItems: "center", gap: 12, padding: 14, borderRadius: 12 },
+  selectedModeText: { fontSize: 15, fontFamily: "Inter_500Medium" },
+  switchLabel: { fontSize: 13, fontFamily: "Inter_400Regular" },
+  switchModes: { flexDirection: "row", gap: 10 },
+  switchModeBtn: {
+    flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center",
+    gap: 6, paddingVertical: 10, borderRadius: 10, borderWidth: 1,
+  },
+  switchModeText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
   emiHint: { flexDirection: "row", padding: 14, borderRadius: 12 },
   emiHintText: { fontFamily: "Inter_400Regular", fontSize: 14 },
   emiHintVal: { fontFamily: "Inter_700Bold", fontSize: 14 },
-  formError: { fontFamily: "Inter_500Medium", fontSize: 13 },
+  errBox: { flexDirection: "row", alignItems: "center", gap: 8, padding: 10, borderRadius: 8 },
+  errText: { fontSize: 13, fontFamily: "Inter_500Medium", flex: 1 },
   fieldGroup: { gap: 6 },
   fieldLabel: { fontSize: 13, fontFamily: "Inter_500Medium" },
-  inputWrapper: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 13 },
-  input: { fontSize: 15, fontFamily: "Inter_400Regular" },
+  inputWrapper: { flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 13 },
+  rupee: { fontSize: 16, fontFamily: "Inter_500Medium" },
+  input: { flex: 1, fontSize: 15, fontFamily: "Inter_400Regular" },
   noteBox: { flexDirection: "row", alignItems: "flex-start", gap: 8, padding: 12, borderRadius: 10 },
   noteText: { flex: 1, fontFamily: "Inter_400Regular", fontSize: 12 },
   saveBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderRadius: 12, paddingVertical: 15, marginTop: 8 },
   saveBtnText: { color: "#fff", fontSize: 16, fontFamily: "Inter_600SemiBold" },
+  // Notifications
+  notifList: { padding: 20, gap: 10 },
+  notifEmpty: { alignItems: "center", paddingTop: 60, gap: 12 },
+  notifEmptyText: { fontSize: 15, fontFamily: "Inter_400Regular" },
+  notifItem: { flexDirection: "row", alignItems: "flex-start", gap: 12, padding: 14, borderRadius: 14, borderWidth: 1 },
+  notifIconBox: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  notifInfo: { flex: 1 },
+  notifMsg: { fontSize: 14, fontFamily: "Inter_500Medium", lineHeight: 20 },
+  notifTime: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 4 },
+  unreadDot: { width: 8, height: 8, borderRadius: 4, marginTop: 4 },
 });

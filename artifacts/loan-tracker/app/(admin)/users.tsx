@@ -27,14 +27,13 @@ export default function UsersScreen() {
   const [search, setSearch] = useState("");
   const [modalVisible, setModalVisible] = useState(false);
   const [editUser, setEditUser] = useState<UserProfile | null>(null);
-  const [form, setForm] = useState({ name: "", email: "", password: "" });
+  const [form, setForm] = useState({ name: "", email: "", phone: "", password: "" });
   const [formError, setFormError] = useState("");
 
   const { data: users = [], isLoading } = useQuery({ queryKey: ["users"], queryFn: getAllUsers });
 
   const addMutation = useMutation({
-    mutationFn: ({ name, email, pass }: { name: string; email: string; pass: string }) =>
-      addUser(name, email, pass),
+    mutationFn: ({ name, email, pass, phone }: any) => addUser(name, email, pass, phone),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["users"] }); closeModal(); },
     onError: (e: any) => setFormError(e?.message?.includes("email-already") ? "Email already in use" : "Failed to add user"),
   });
@@ -56,18 +55,29 @@ export default function UsersScreen() {
       u.email.toLowerCase().includes(search.toLowerCase())
   );
 
-  const openAdd = () => { setEditUser(null); setForm({ name: "", email: "", password: "" }); setFormError(""); setModalVisible(true); };
-  const openEdit = (u: UserProfile) => { setEditUser(u); setForm({ name: u.name, email: u.email, password: "" }); setFormError(""); setModalVisible(true); };
+  const openAdd = () => {
+    setEditUser(null);
+    setForm({ name: "", email: "", phone: "", password: "" });
+    setFormError("");
+    setModalVisible(true);
+  };
+  const openEdit = (u: UserProfile) => {
+    setEditUser(u);
+    setForm({ name: u.name, email: u.email, phone: u.phone ?? "", password: "" });
+    setFormError("");
+    setModalVisible(true);
+  };
   const closeModal = () => setModalVisible(false);
 
   const handleSave = async () => {
     if (!form.name.trim() || !form.email.trim()) { setFormError("Name and email are required"); return; }
+    if (form.phone && !/^\d{10}$/.test(form.phone.trim())) { setFormError("Phone must be 10 digits"); return; }
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (editUser) {
-      updateMutation.mutate({ id: editUser.id, data: { name: form.name.trim(), email: form.email.trim() } });
+      updateMutation.mutate({ id: editUser.id, data: { name: form.name.trim(), email: form.email.trim(), phone: form.phone.trim() } });
     } else {
       if (!form.password || form.password.length < 6) { setFormError("Password must be 6+ characters"); return; }
-      addMutation.mutate({ name: form.name.trim(), email: form.email.trim(), pass: form.password });
+      addMutation.mutate({ name: form.name.trim(), email: form.email.trim(), pass: form.password, phone: form.phone.trim() });
     }
   };
 
@@ -92,7 +102,7 @@ export default function UsersScreen() {
         }
       />
 
-      <View style={[styles.searchRow, { borderBottomColor: c.border, paddingHorizontal: 20 }]}>
+      <View style={[styles.searchRow, { paddingHorizontal: 20 }]}>
         <View style={[styles.searchBox, { backgroundColor: c.muted, borderColor: c.border }]}>
           <Feather name="search" size={16} color={c.mutedForeground} />
           <TextInput
@@ -117,7 +127,7 @@ export default function UsersScreen() {
           data={filtered}
           keyExtractor={(u) => u.id}
           contentContainerStyle={{ padding: 20, paddingBottom: bottomPad + 90 }}
-          scrollEnabled={!!filtered.length}
+          scrollEnabled
           ListEmptyComponent={
             <View style={styles.empty}>
               <Feather name="users" size={40} color={c.mutedForeground} />
@@ -134,6 +144,12 @@ export default function UsersScreen() {
               <View style={styles.userInfo}>
                 <Text style={[styles.userName, { color: c.foreground }]}>{item.name}</Text>
                 <Text style={[styles.userEmail, { color: c.mutedForeground }]}>{item.email}</Text>
+                {item.phone ? (
+                  <View style={styles.phoneRow}>
+                    <Feather name="phone" size={11} color={c.mutedForeground} />
+                    <Text style={[styles.phoneText, { color: c.mutedForeground }]}>+91 {item.phone}</Text>
+                  </View>
+                ) : null}
               </View>
               <View style={styles.actions}>
                 <TouchableOpacity onPress={() => openEdit(item)} style={[styles.actionBtn, { backgroundColor: c.muted }]}>
@@ -159,30 +175,75 @@ export default function UsersScreen() {
 
           <View style={styles.modalBody}>
             {formError ? (
-              <Text style={[styles.formError, { color: c.destructive }]}>{formError}</Text>
+              <View style={[styles.errorBox, { backgroundColor: c.destructive + "15", borderColor: c.destructive + "40" }]}>
+                <Feather name="alert-circle" size={14} color={c.destructive} />
+                <Text style={[styles.formError, { color: c.destructive }]}>{formError}</Text>
+              </View>
             ) : null}
 
-            {([
-              { label: "Full Name", key: "name", placeholder: "Enter full name", secure: false },
-              { label: "Email", key: "email", placeholder: "Enter email address", secure: false },
-              ...(!editUser ? [{ label: "Password", key: "password", placeholder: "Min 6 characters", secure: true }] : []),
-            ] as const).map((field) => (
-              <View key={field.key} style={styles.fieldGroup}>
-                <Text style={[styles.fieldLabel, { color: c.mutedForeground }]}>{field.label}</Text>
+            <View style={styles.fieldGroup}>
+              <Text style={[styles.fieldLabel, { color: c.mutedForeground }]}>Full Name</Text>
+              <View style={[styles.inputWrapper, { borderColor: c.border, backgroundColor: c.muted }]}>
+                <Feather name="user" size={16} color={c.mutedForeground} />
+                <TextInput
+                  style={[styles.input, { color: c.foreground }]}
+                  placeholder="Enter full name"
+                  placeholderTextColor={c.mutedForeground}
+                  value={form.name}
+                  onChangeText={(v) => setForm((f) => ({ ...f, name: v }))}
+                  autoCapitalize="words"
+                />
+              </View>
+            </View>
+
+            <View style={styles.fieldGroup}>
+              <Text style={[styles.fieldLabel, { color: c.mutedForeground }]}>Email</Text>
+              <View style={[styles.inputWrapper, { borderColor: c.border, backgroundColor: c.muted }]}>
+                <Feather name="mail" size={16} color={c.mutedForeground} />
+                <TextInput
+                  style={[styles.input, { color: c.foreground }]}
+                  placeholder="Enter email address"
+                  placeholderTextColor={c.mutedForeground}
+                  value={form.email}
+                  onChangeText={(v) => setForm((f) => ({ ...f, email: v }))}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                />
+              </View>
+            </View>
+
+            <View style={styles.fieldGroup}>
+              <Text style={[styles.fieldLabel, { color: c.mutedForeground }]}>Phone (optional)</Text>
+              <View style={[styles.inputWrapper, { borderColor: c.border, backgroundColor: c.muted }]}>
+                <Feather name="phone" size={16} color={c.mutedForeground} />
+                <TextInput
+                  style={[styles.input, { color: c.foreground }]}
+                  placeholder="10-digit number"
+                  placeholderTextColor={c.mutedForeground}
+                  value={form.phone}
+                  onChangeText={(v) => setForm((f) => ({ ...f, phone: v.replace(/[^0-9]/g, "").slice(0, 10) }))}
+                  keyboardType="phone-pad"
+                  maxLength={10}
+                />
+              </View>
+            </View>
+
+            {!editUser && (
+              <View style={styles.fieldGroup}>
+                <Text style={[styles.fieldLabel, { color: c.mutedForeground }]}>Password</Text>
                 <View style={[styles.inputWrapper, { borderColor: c.border, backgroundColor: c.muted }]}>
+                  <Feather name="lock" size={16} color={c.mutedForeground} />
                   <TextInput
                     style={[styles.input, { color: c.foreground }]}
-                    placeholder={field.placeholder}
+                    placeholder="Min 6 characters"
                     placeholderTextColor={c.mutedForeground}
-                    value={form[field.key]}
-                    onChangeText={(v) => setForm((f) => ({ ...f, [field.key]: v }))}
-                    secureTextEntry={field.secure}
-                    autoCapitalize={field.key === "email" ? "none" : "words"}
-                    keyboardType={field.key === "email" ? "email-address" : "default"}
+                    value={form.password}
+                    onChangeText={(v) => setForm((f) => ({ ...f, password: v }))}
+                    secureTextEntry
                   />
                 </View>
               </View>
-            ))}
+            )}
 
             <TouchableOpacity
               style={[styles.saveBtn, { backgroundColor: c.primary }]}
@@ -210,11 +271,13 @@ const styles = StyleSheet.create({
   searchBox: { flexDirection: "row", alignItems: "center", gap: 8, borderRadius: 10, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 10 },
   searchInput: { flex: 1, fontSize: 14, fontFamily: "Inter_400Regular" },
   userCard: { flexDirection: "row", alignItems: "center", gap: 12, padding: 14, borderRadius: 14, borderWidth: 1, marginBottom: 10 },
-  avatar: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
+  avatar: { width: 48, height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center" },
   avatarText: { fontSize: 18, fontFamily: "Inter_700Bold" },
   userInfo: { flex: 1 },
   userName: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
   userEmail: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
+  phoneRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 3 },
+  phoneText: { fontSize: 11, fontFamily: "Inter_400Regular" },
   actions: { flexDirection: "row", gap: 8 },
   actionBtn: { width: 34, height: 34, borderRadius: 8, alignItems: "center", justifyContent: "center" },
   empty: { alignItems: "center", paddingTop: 60, gap: 12 },
@@ -223,11 +286,12 @@ const styles = StyleSheet.create({
   modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 20, borderBottomWidth: 1 },
   modalTitle: { fontSize: 18, fontFamily: "Inter_700Bold" },
   modalBody: { padding: 24, gap: 16 },
-  formError: { fontFamily: "Inter_500Medium", fontSize: 13, marginBottom: 4 },
+  errorBox: { flexDirection: "row", alignItems: "center", gap: 8, padding: 12, borderRadius: 10, borderWidth: 1 },
+  formError: { fontFamily: "Inter_500Medium", fontSize: 13, flex: 1 },
   fieldGroup: { gap: 6 },
   fieldLabel: { fontSize: 13, fontFamily: "Inter_500Medium" },
-  inputWrapper: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 13 },
-  input: { fontSize: 15, fontFamily: "Inter_400Regular" },
+  inputWrapper: { flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 13 },
+  input: { flex: 1, fontSize: 15, fontFamily: "Inter_400Regular" },
   saveBtn: { borderRadius: 12, paddingVertical: 15, alignItems: "center", marginTop: 8 },
   saveBtnText: { color: "#fff", fontSize: 16, fontFamily: "Inter_600SemiBold" },
 });

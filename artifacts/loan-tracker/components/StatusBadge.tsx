@@ -3,22 +3,25 @@ import { StyleSheet, Text, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useColors } from "@/hooks/useColors";
 
+type StatusValue = "pending" | "confirmed" | "rejected" | "active" | "completed";
+
 interface StatusBadgeProps {
-  status: "pending" | "confirmed" | "active" | "completed";
+  status: StatusValue;
   size?: "sm" | "md";
 }
 
 export function StatusBadge({ status, size = "sm" }: StatusBadgeProps) {
   const c = useColors();
 
-  const config = {
-    pending: { label: "Pending", color: c.warning, bg: c.warning + "22", icon: "clock" as const },
-    confirmed: { label: "Confirmed", color: c.success, bg: c.success + "22", icon: "check-circle" as const },
-    active: { label: "Active", color: c.primary, bg: c.primary + "22", icon: "activity" as const },
-    completed: { label: "Completed", color: c.success, bg: c.success + "22", icon: "check-circle" as const },
+  const config: Record<StatusValue, { label: string; color: string; bg: string; icon: React.ComponentProps<typeof Feather>["name"] }> = {
+    pending:   { label: "Pending",   color: c.warning,     bg: c.warning + "22",     icon: "clock" },
+    confirmed: { label: "Confirmed", color: c.success,     bg: c.success + "22",     icon: "check-circle" },
+    rejected:  { label: "Rejected",  color: c.destructive, bg: c.destructive + "20", icon: "x-circle" },
+    active:    { label: "Active",    color: c.primary,     bg: c.primary + "22",     icon: "activity" },
+    completed: { label: "Completed", color: c.success,     bg: c.success + "22",     icon: "check-circle" },
   };
 
-  const { label, color, bg, icon } = config[status];
+  const { label, color, bg, icon } = config[status] ?? config.pending;
   const fontSize = size === "sm" ? 11 : 13;
   const iconSize = size === "sm" ? 11 : 13;
   const padH = size === "sm" ? 8 : 12;

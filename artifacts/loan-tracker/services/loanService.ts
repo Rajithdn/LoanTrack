@@ -6,8 +6,6 @@ import {
   updateDoc,
   query,
   where,
-  orderBy,
-  Timestamp,
 } from "firebase/firestore";
 import { db } from "./firebase";
 
@@ -20,18 +18,35 @@ export interface Loan {
   duration: number;
   emi: number;
   totalAmount: number;
+  interestAmount: number;
   paidAmount: number;
   pendingAmount: number;
   status: "active" | "completed";
   startDate: string;
 }
 
+/**
+ * Standard EMI formula: P×R×(1+R)^N / ((1+R)^N - 1)
+ * Used for monthly installment calculation.
+ */
 export function calculateEMI(principal: number, annualRate: number, months: number): number {
-  if (annualRate === 0) return principal / months;
+  if (annualRate === 0) return Math.round((principal / months) * 100) / 100;
   const r = annualRate / 100 / 12;
   const n = months;
   const emi = (principal * r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
   return Math.round(emi * 100) / 100;
+}
+
+/**
+ * Simple flat interest breakdown for display.
+ * interestAmount = principal × rate / 100
+ * totalAmount    = principal + interestAmount
+ */
+export function calculateLoanBreakdown(principal: number, interestRate: number, months: number) {
+  const interestAmount = Math.round((principal * interestRate) / 100 * 100) / 100;
+  const totalAmount = principal + interestAmount;
+  const emi = calculateEMI(principal, interestRate, months);
+  return { interestAmount, totalAmount, emi };
 }
 
 export async function getAllLoans(): Promise<Loan[]> {
@@ -52,8 +67,7 @@ export async function addLoan(
   interest: number,
   duration: number
 ): Promise<Loan> {
-  const emi = calculateEMI(amount, interest, duration);
-  const totalAmount = Math.round(emi * duration * 100) / 100;
+  const { interestAmount, totalAmount, emi } = calculateLoanBreakdown(amount, interest, duration);
   const loan: Omit<Loan, "id"> = {
     userId,
     userName,
@@ -62,6 +76,7 @@ export async function addLoan(
     duration,
     emi,
     totalAmount,
+    interestAmount,
     paidAmount: 0,
     pendingAmount: totalAmount,
     status: "active",
