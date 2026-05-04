@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import {
   ActivityIndicator,
+  Dimensions,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -13,14 +14,18 @@ import {
 import { router } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/context/AuthContext";
 import { signIn } from "@/services/authService";
 
+const { height: SCREEN_H } = Dimensions.get("window");
+const GREEN = "#00A86B";
+const GREEN_DARK = "#007A4D";
+const BLUE = "#0D47A1";
+
 export default function LoginScreen() {
   const c = useColors();
-  const insets = useSafeAreaInsets();
   const { setUser } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -52,81 +57,87 @@ export default function LoginScreen() {
     }
   };
 
-  const topPad = Platform.OS === "web" ? 67 : insets.top;
-
   return (
     <KeyboardAvoidingView
-      style={[styles.flex, { backgroundColor: c.background }]}
+      style={styles.flex}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <ScrollView
-        contentContainerStyle={[
-          styles.container,
-          { paddingTop: topPad + 40, paddingBottom: insets.bottom + 40 },
-        ]}
+        style={styles.flex}
+        contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
+        bounces={false}
       >
-        {/* Logo */}
-        <View style={styles.logoArea}>
-          <View style={[styles.logoBox, { backgroundColor: c.primary }]}>
-            <Feather name="trending-up" size={32} color="#fff" />
-          </View>
-          <Text style={[styles.appName, { color: c.foreground }]}>LoanTracker</Text>
-          <Text style={[styles.tagline, { color: c.mutedForeground }]}>Manage loans with clarity</Text>
+        {/* Green gradient header */}
+        <View style={styles.header}>
+          {/* Decorative circles */}
+          <View style={styles.circle1} />
+          <View style={styles.circle2} />
+          <View style={styles.circle3} />
+
+          <SafeAreaView edges={["top"]} style={styles.headerContent}>
+            <View style={styles.logoCircle}>
+              <Feather name="trending-up" size={30} color={GREEN} />
+            </View>
+            <Text style={styles.appName}>LoanTracker</Text>
+            <Text style={styles.tagline}>Smart loan management for everyone</Text>
+          </SafeAreaView>
         </View>
 
-        {/* Admin hint */}
-        <View style={[styles.hintBox, { backgroundColor: c.secondary, borderColor: c.border }]}>
-          <Feather name="info" size={14} color={c.primary} />
-          <View style={styles.hintText}>
-            <Text style={[styles.hintTitle, { color: c.foreground }]}>Admin credentials</Text>
-            <Text style={[styles.hintSub, { color: c.mutedForeground }]}>admin@gmail.com · Admin@07</Text>
-          </View>
-        </View>
-
-        {/* Card */}
-        <View style={[styles.card, { backgroundColor: c.card, borderColor: c.border }]}>
-          <Text style={[styles.heading, { color: c.foreground }]}>Welcome back</Text>
-          <Text style={[styles.subheading, { color: c.mutedForeground }]}>Sign in to your account</Text>
+        {/* White form card sliding over green */}
+        <View style={[styles.formCard, { backgroundColor: c.card }]}>
+          <Text style={[styles.heading, { color: c.foreground }]}>Welcome Back</Text>
+          <Text style={[styles.subheading, { color: c.mutedForeground }]}>
+            Sign in to your account
+          </Text>
 
           {error ? (
-            <View style={[styles.errorBox, { backgroundColor: c.destructive + "18", borderColor: c.destructive + "40" }]}>
-              <Feather name="alert-circle" size={14} color={c.destructive} />
-              <Text style={[styles.errorText, { color: c.destructive }]}>{error}</Text>
+            <View style={[styles.errorBox, { backgroundColor: "#FEE2E218", borderColor: "#EF444440" }]}>
+              <Feather name="alert-circle" size={14} color="#EF4444" />
+              <Text style={[styles.errorText, { color: "#EF4444" }]}>{error}</Text>
             </View>
           ) : null}
 
-          <View style={[styles.inputWrapper, { borderColor: c.border, backgroundColor: c.muted }]}>
-            <Feather name="mail" size={16} color={c.mutedForeground} />
-            <TextInput
-              style={[styles.input, { color: c.foreground }]}
-              placeholder="Email address"
-              placeholderTextColor={c.mutedForeground}
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
+          {/* Email */}
+          <View style={styles.fieldGroup}>
+            <Text style={[styles.fieldLabel, { color: c.mutedForeground }]}>Email Address</Text>
+            <View style={[styles.inputWrapper, { borderColor: c.border, backgroundColor: c.muted }]}>
+              <Feather name="mail" size={16} color={c.mutedForeground} />
+              <TextInput
+                style={[styles.input, { color: c.foreground }]}
+                placeholder="Enter your email"
+                placeholderTextColor={c.mutedForeground}
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+            </View>
           </View>
 
-          <View style={[styles.inputWrapper, { borderColor: c.border, backgroundColor: c.muted }]}>
-            <Feather name="lock" size={16} color={c.mutedForeground} />
-            <TextInput
-              style={[styles.input, { color: c.foreground }]}
-              placeholder="Password"
-              placeholderTextColor={c.mutedForeground}
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry={!showPass}
-            />
-            <TouchableOpacity onPress={() => setShowPass(!showPass)}>
-              <Feather name={showPass ? "eye-off" : "eye"} size={16} color={c.mutedForeground} />
-            </TouchableOpacity>
+          {/* Password */}
+          <View style={styles.fieldGroup}>
+            <Text style={[styles.fieldLabel, { color: c.mutedForeground }]}>Password</Text>
+            <View style={[styles.inputWrapper, { borderColor: c.border, backgroundColor: c.muted }]}>
+              <Feather name="lock" size={16} color={c.mutedForeground} />
+              <TextInput
+                style={[styles.input, { color: c.foreground }]}
+                placeholder="Enter your password"
+                placeholderTextColor={c.mutedForeground}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPass}
+              />
+              <TouchableOpacity onPress={() => setShowPass(!showPass)}>
+                <Feather name={showPass ? "eye-off" : "eye"} size={16} color={c.mutedForeground} />
+              </TouchableOpacity>
+            </View>
           </View>
 
+          {/* Sign In button */}
           <TouchableOpacity
-            style={[styles.loginBtn, { backgroundColor: c.primary }, loading && { opacity: 0.7 }]}
+            style={[styles.loginBtn, loading && { opacity: 0.75 }]}
             onPress={handleLogin}
             disabled={loading}
             activeOpacity={0.85}
@@ -137,20 +148,30 @@ export default function LoginScreen() {
               <Text style={styles.loginBtnText}>Sign In</Text>
             )}
           </TouchableOpacity>
-        </View>
 
-        <View style={styles.registerRow}>
-          <Text style={[styles.registerText, { color: c.mutedForeground }]}>New borrower? </Text>
-          <TouchableOpacity onPress={() => router.push("/register")}>
-            <Text style={[styles.registerLink, { color: c.primary }]}>Create account</Text>
+          {/* Divider */}
+          <View style={styles.divider}>
+            <View style={[styles.dividerLine, { backgroundColor: c.border }]} />
+            <Text style={[styles.dividerText, { color: c.mutedForeground }]}>or</Text>
+            <View style={[styles.dividerLine, { backgroundColor: c.border }]} />
+          </View>
+
+          {/* Register */}
+          <TouchableOpacity
+            style={[styles.registerBtn, { borderColor: GREEN }]}
+            onPress={() => router.push("/register")}
+            activeOpacity={0.8}
+          >
+            <Feather name="user-plus" size={16} color={GREEN} />
+            <Text style={[styles.registerBtnText, { color: GREEN }]}>Create New Account</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Firebase setup note */}
-        <View style={[styles.setupNote, { backgroundColor: c.muted, borderColor: c.border }]}>
-          <Feather name="settings" size={12} color={c.mutedForeground} />
-          <Text style={[styles.setupText, { color: c.mutedForeground }]}>
-            Firebase setup required: Enable Email/Password auth and set Firestore rules to allow authenticated access.
+        {/* Footer note */}
+        <View style={styles.footer}>
+          <Feather name="shield" size={12} color={GREEN + "99"} />
+          <Text style={[styles.footerText, { color: GREEN + "99" }]}>
+            Secured with Firebase Authentication
           </Text>
         </View>
       </ScrollView>
@@ -159,45 +180,87 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
-  container: { paddingHorizontal: 24 },
-  logoArea: { alignItems: "center", marginBottom: 20 },
-  logoBox: {
-    width: 72, height: 72, borderRadius: 20,
-    alignItems: "center", justifyContent: "center", marginBottom: 16,
-    shadowColor: "#1A56DB", shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35, shadowRadius: 16, elevation: 8,
+  flex: { flex: 1, backgroundColor: GREEN },
+  scroll: { flexGrow: 1 },
+  // Header
+  header: {
+    backgroundColor: GREEN,
+    paddingBottom: 60,
+    minHeight: SCREEN_H * 0.38,
+    justifyContent: "flex-end",
+    overflow: "hidden",
   },
-  appName: { fontSize: 28, fontFamily: "Inter_700Bold" },
-  tagline: { fontSize: 14, fontFamily: "Inter_400Regular", marginTop: 4 },
-  hintBox: {
-    flexDirection: "row", alignItems: "center", gap: 10,
-    borderRadius: 12, borderWidth: 1, padding: 12, marginBottom: 16,
+  circle1: {
+    position: "absolute", width: 220, height: 220, borderRadius: 110,
+    backgroundColor: "rgba(255,255,255,0.07)", top: -60, right: -60,
   },
-  hintText: { flex: 1 },
-  hintTitle: { fontFamily: "Inter_600SemiBold", fontSize: 13 },
-  hintSub: { fontFamily: "Inter_400Regular", fontSize: 12, marginTop: 2 },
-  card: { borderRadius: 20, padding: 24, borderWidth: 1, gap: 16 },
-  heading: { fontSize: 22, fontFamily: "Inter_700Bold" },
+  circle2: {
+    position: "absolute", width: 160, height: 160, borderRadius: 80,
+    backgroundColor: "rgba(255,255,255,0.07)", top: 40, left: -50,
+  },
+  circle3: {
+    position: "absolute", width: 100, height: 100, borderRadius: 50,
+    backgroundColor: "rgba(255,255,255,0.1)", bottom: 40, right: 30,
+  },
+  headerContent: {
+    alignItems: "center",
+    paddingHorizontal: 24,
+    paddingBottom: 20,
+  },
+  logoCircle: {
+    width: 76, height: 76, borderRadius: 38,
+    backgroundColor: "#fff",
+    alignItems: "center", justifyContent: "center",
+    marginBottom: 16,
+    shadowColor: "#000", shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2, shadowRadius: 16, elevation: 10,
+  },
+  appName: { fontSize: 30, fontFamily: "Inter_700Bold", color: "#fff", marginBottom: 6 },
+  tagline: { fontSize: 14, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.82)", textAlign: "center" },
+  // Form card
+  formCard: {
+    flex: 1,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    padding: 28,
+    paddingTop: 32,
+    gap: 16,
+    shadowColor: "#000", shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.08, shadowRadius: 20, elevation: 10,
+  },
+  heading: { fontSize: 24, fontFamily: "Inter_700Bold" },
   subheading: { fontSize: 14, fontFamily: "Inter_400Regular", marginTop: -8 },
   errorBox: {
     flexDirection: "row", alignItems: "flex-start", gap: 8,
     padding: 12, borderRadius: 10, borderWidth: 1,
   },
   errorText: { fontSize: 13, fontFamily: "Inter_500Medium", flex: 1, lineHeight: 18 },
+  fieldGroup: { gap: 7 },
+  fieldLabel: { fontSize: 13, fontFamily: "Inter_500Medium" },
   inputWrapper: {
     flexDirection: "row", alignItems: "center", gap: 10,
-    borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 13,
+    borderWidth: 1.5, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 13,
   },
   input: { flex: 1, fontSize: 15, fontFamily: "Inter_400Regular" },
-  loginBtn: { borderRadius: 12, paddingVertical: 15, alignItems: "center", marginTop: 4 },
-  loginBtnText: { color: "#fff", fontSize: 16, fontFamily: "Inter_600SemiBold" },
-  registerRow: { flexDirection: "row", justifyContent: "center", marginTop: 24, marginBottom: 16 },
-  registerText: { fontSize: 14, fontFamily: "Inter_400Regular" },
-  registerLink: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
-  setupNote: {
-    flexDirection: "row", alignItems: "flex-start", gap: 8,
-    padding: 12, borderRadius: 10, borderWidth: 1,
+  loginBtn: {
+    borderRadius: 14, paddingVertical: 16, alignItems: "center",
+    backgroundColor: GREEN,
+    shadowColor: GREEN, shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35, shadowRadius: 12, elevation: 6,
+    marginTop: 4,
   },
-  setupText: { flex: 1, fontSize: 11, fontFamily: "Inter_400Regular", lineHeight: 16 },
+  loginBtnText: { color: "#fff", fontSize: 16, fontFamily: "Inter_700Bold", letterSpacing: 0.3 },
+  divider: { flexDirection: "row", alignItems: "center", gap: 12 },
+  dividerLine: { flex: 1, height: 1 },
+  dividerText: { fontSize: 13, fontFamily: "Inter_400Regular" },
+  registerBtn: {
+    borderRadius: 14, paddingVertical: 14, alignItems: "center",
+    borderWidth: 1.5, flexDirection: "row", justifyContent: "center", gap: 8,
+  },
+  registerBtnText: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
+  footer: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center",
+    gap: 6, paddingVertical: 24, backgroundColor: "#fff",
+  },
+  footerText: { fontSize: 12, fontFamily: "Inter_400Regular" },
 });

@@ -16,12 +16,12 @@ export function SummaryCard({ title, value, icon, color, subtitle }: SummaryCard
   const iconColor = color ?? c.primary;
   return (
     <View style={[styles.card, { backgroundColor: c.card, borderColor: c.border }]}>
-      <View style={[styles.iconBox, { backgroundColor: iconColor + "1A" }]}>
+      <View style={[styles.iconBox, { backgroundColor: iconColor + "1F" }]}>
         <Feather name={icon} size={20} color={iconColor} />
       </View>
       <Text style={[styles.value, { color: c.foreground }]}>{value}</Text>
       <Text style={[styles.title, { color: c.mutedForeground }]}>{title}</Text>
-      {subtitle ? <Text style={[styles.subtitle, { color: c.accent }]}>{subtitle}</Text> : null}
+      {subtitle ? <Text style={[styles.subtitle, { color: iconColor }]}>{subtitle}</Text> : null}
     </View>
   );
 }
@@ -29,16 +29,21 @@ export function SummaryCard({ title, value, icon, color, subtitle }: SummaryCard
 const styles = StyleSheet.create({
   card: {
     flex: 1,
-    borderRadius: 14,
+    borderRadius: 16,
     padding: 16,
     borderWidth: 1,
     minWidth: 140,
     gap: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
   iconBox: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 8,

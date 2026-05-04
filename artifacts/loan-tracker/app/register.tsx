@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import {
   ActivityIndicator,
+  Dimensions,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -13,14 +14,16 @@ import {
 import { router } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/context/AuthContext";
 import { register } from "@/services/authService";
 
+const { height: SCREEN_H } = Dimensions.get("window");
+const GREEN = "#00A86B";
+
 export default function RegisterScreen() {
   const c = useColors();
-  const insets = useSafeAreaInsets();
   const { setUser } = useAuth();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -58,31 +61,40 @@ export default function RegisterScreen() {
     }
   };
 
-  const topPad = Platform.OS === "web" ? 67 : insets.top;
-
   return (
     <KeyboardAvoidingView
-      style={[styles.flex, { backgroundColor: c.background }]}
+      style={styles.flex}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <ScrollView
-        contentContainerStyle={[styles.container, { paddingTop: topPad + 32, paddingBottom: insets.bottom + 40 }]}
+        style={styles.flex}
+        contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
+        bounces={false}
       >
-        <TouchableOpacity onPress={() => router.back()} style={styles.back}>
-          <Feather name="arrow-left" size={22} color={c.foreground} />
-        </TouchableOpacity>
+        {/* Green header */}
+        <View style={styles.header}>
+          <View style={styles.circle1} />
+          <View style={styles.circle2} />
 
-        <Text style={[styles.heading, { color: c.foreground }]}>Create Account</Text>
-        <Text style={[styles.subheading, { color: c.mutedForeground }]}>
-          Register as a borrower to track your loan
-        </Text>
+          <SafeAreaView edges={["top"]} style={styles.headerContent}>
+            <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+              <Feather name="arrow-left" size={22} color="#fff" />
+            </TouchableOpacity>
+            <View style={styles.logoCircle}>
+              <Feather name="user-plus" size={28} color={GREEN} />
+            </View>
+            <Text style={styles.heading}>Create Account</Text>
+            <Text style={styles.subheading}>Join LoanTracker as a borrower</Text>
+          </SafeAreaView>
+        </View>
 
-        <View style={[styles.card, { backgroundColor: c.card, borderColor: c.border }]}>
+        {/* White form */}
+        <View style={[styles.formCard, { backgroundColor: c.card }]}>
           {error ? (
-            <View style={[styles.errorBox, { backgroundColor: c.destructive + "18", borderColor: c.destructive + "40" }]}>
-              <Feather name="alert-circle" size={14} color={c.destructive} />
-              <Text style={[styles.errorText, { color: c.destructive }]}>{error}</Text>
+            <View style={[styles.errorBox, { backgroundColor: "#FEE2E218", borderColor: "#EF444440" }]}>
+              <Feather name="alert-circle" size={14} color="#EF4444" />
+              <Text style={[styles.errorText, { color: "#EF4444" }]}>{error}</Text>
             </View>
           ) : null}
 
@@ -125,12 +137,12 @@ export default function RegisterScreen() {
             <Text style={[styles.fieldLabel, { color: c.mutedForeground }]}>Phone Number</Text>
             <View style={[styles.inputWrapper, { borderColor: c.border, backgroundColor: c.muted }]}>
               <Feather name="phone" size={16} color={c.mutedForeground} />
-              <View style={styles.phonePrefix}>
+              <View style={[styles.phonePrefix, { borderRightColor: c.border }]}>
                 <Text style={[styles.prefixText, { color: c.mutedForeground }]}>+91</Text>
               </View>
               <TextInput
                 style={[styles.input, { color: c.foreground }]}
-                placeholder="10-digit mobile number"
+                placeholder="10-digit number"
                 placeholderTextColor={c.mutedForeground}
                 value={phone}
                 onChangeText={(v) => setPhone(v.replace(/[^0-9]/g, "").slice(0, 10))}
@@ -138,10 +150,9 @@ export default function RegisterScreen() {
                 maxLength={10}
               />
               {phone.length === 10 && (
-                <Feather name="check-circle" size={16} color={c.success} />
+                <Feather name="check-circle" size={16} color={GREEN} />
               )}
             </View>
-            <Text style={[styles.hint, { color: c.mutedForeground }]}>10 digits only, no spaces</Text>
           </View>
 
           {/* Password */}
@@ -164,7 +175,7 @@ export default function RegisterScreen() {
           </View>
 
           <TouchableOpacity
-            style={[styles.registerBtn, { backgroundColor: c.primary }, loading && { opacity: 0.7 }]}
+            style={[styles.registerBtn, loading && { opacity: 0.75 }]}
             onPress={handleRegister}
             disabled={loading}
             activeOpacity={0.85}
@@ -175,13 +186,13 @@ export default function RegisterScreen() {
               <Text style={styles.registerBtnText}>Create Account</Text>
             )}
           </TouchableOpacity>
-        </View>
 
-        <View style={styles.loginRow}>
-          <Text style={[styles.loginText, { color: c.mutedForeground }]}>Already have an account? </Text>
-          <TouchableOpacity onPress={() => router.replace("/login")}>
-            <Text style={[styles.loginLink, { color: c.primary }]}>Sign in</Text>
-          </TouchableOpacity>
+          <View style={styles.loginRow}>
+            <Text style={[styles.loginText, { color: c.mutedForeground }]}>Already have an account? </Text>
+            <TouchableOpacity onPress={() => router.replace("/login")}>
+              <Text style={[styles.loginLink, { color: GREEN }]}>Sign In</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -189,30 +200,59 @@ export default function RegisterScreen() {
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
-  container: { paddingHorizontal: 24 },
-  back: { marginBottom: 24 },
-  heading: { fontSize: 28, fontFamily: "Inter_700Bold", marginBottom: 6 },
-  subheading: { fontSize: 15, fontFamily: "Inter_400Regular", marginBottom: 28 },
-  card: { borderRadius: 20, padding: 24, borderWidth: 1, gap: 16 },
+  flex: { flex: 1, backgroundColor: GREEN },
+  scroll: { flexGrow: 1 },
+  header: {
+    backgroundColor: GREEN,
+    paddingBottom: 60,
+    minHeight: SCREEN_H * 0.34,
+    justifyContent: "flex-end",
+    overflow: "hidden",
+  },
+  circle1: {
+    position: "absolute", width: 200, height: 200, borderRadius: 100,
+    backgroundColor: "rgba(255,255,255,0.08)", top: -50, right: -50,
+  },
+  circle2: {
+    position: "absolute", width: 130, height: 130, borderRadius: 65,
+    backgroundColor: "rgba(255,255,255,0.06)", top: 30, left: -40,
+  },
+  headerContent: { alignItems: "center", paddingHorizontal: 24, paddingBottom: 16 },
+  backBtn: { alignSelf: "flex-start", marginBottom: 16, padding: 4 },
+  logoCircle: {
+    width: 70, height: 70, borderRadius: 35, backgroundColor: "#fff",
+    alignItems: "center", justifyContent: "center", marginBottom: 14,
+    shadowColor: "#000", shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2, shadowRadius: 16, elevation: 10,
+  },
+  heading: { fontSize: 26, fontFamily: "Inter_700Bold", color: "#fff", marginBottom: 4 },
+  subheading: { fontSize: 14, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.8)" },
+  formCard: {
+    flex: 1, borderTopLeftRadius: 32, borderTopRightRadius: 32,
+    padding: 28, paddingTop: 32, gap: 16,
+  },
   errorBox: {
     flexDirection: "row", alignItems: "flex-start", gap: 8,
     padding: 12, borderRadius: 10, borderWidth: 1,
   },
   errorText: { fontSize: 13, fontFamily: "Inter_500Medium", flex: 1, lineHeight: 18 },
-  fieldGroup: { gap: 6 },
+  fieldGroup: { gap: 7 },
   fieldLabel: { fontSize: 13, fontFamily: "Inter_500Medium" },
   inputWrapper: {
     flexDirection: "row", alignItems: "center", gap: 10,
-    borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 13,
+    borderWidth: 1.5, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 13,
   },
-  phonePrefix: { paddingRight: 6, borderRightWidth: 1, borderRightColor: "#CBD5E1", marginRight: 2 },
+  phonePrefix: { paddingRight: 8, borderRightWidth: 1, marginRight: 2 },
   prefixText: { fontSize: 14, fontFamily: "Inter_500Medium" },
   input: { flex: 1, fontSize: 15, fontFamily: "Inter_400Regular" },
-  hint: { fontSize: 11, fontFamily: "Inter_400Regular" },
-  registerBtn: { borderRadius: 12, paddingVertical: 15, alignItems: "center", marginTop: 4 },
-  registerBtnText: { color: "#fff", fontSize: 16, fontFamily: "Inter_600SemiBold" },
-  loginRow: { flexDirection: "row", justifyContent: "center", marginTop: 24 },
+  registerBtn: {
+    borderRadius: 14, paddingVertical: 16, alignItems: "center",
+    backgroundColor: GREEN, marginTop: 4,
+    shadowColor: GREEN, shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35, shadowRadius: 12, elevation: 6,
+  },
+  registerBtnText: { color: "#fff", fontSize: 16, fontFamily: "Inter_700Bold", letterSpacing: 0.3 },
+  loginRow: { flexDirection: "row", justifyContent: "center", paddingBottom: 8 },
   loginText: { fontSize: 14, fontFamily: "Inter_400Regular" },
   loginLink: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
 });
