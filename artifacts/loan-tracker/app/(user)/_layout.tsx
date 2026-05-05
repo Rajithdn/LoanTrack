@@ -43,6 +43,13 @@ export default function UserLayout() {
         }}
       />
       <Tabs.Screen
+        name="schedule"
+        options={{
+          title: "Schedule",
+          tabBarIcon: ({ color }) => <Feather name="calendar" size={22} color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="history"
         options={{
           title: "History",

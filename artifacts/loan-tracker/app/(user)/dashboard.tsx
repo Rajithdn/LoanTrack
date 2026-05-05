@@ -123,8 +123,8 @@ export default function UserDashboard() {
   );
 
   return (
-    <SafeAreaView style={[styles.flex, { backgroundColor: c.background }]} edges={["top"]}>
-      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={c.background} />
+    <View style={[styles.root, { backgroundColor: "#00A86B" }]}>
+      <StatusBar barStyle="light-content" backgroundColor="#00A86B" />
 
       {notification && (
         <NotificationBanner
@@ -135,47 +135,52 @@ export default function UserDashboard() {
         />
       )}
 
+      {/* Green gradient header */}
+      <View style={styles.headerBg}>
+        <View style={styles.circle1} />
+        <View style={styles.circle2} />
+        <SafeAreaView edges={["top"]} style={styles.headerContent}>
+          <View style={styles.headerRow}>
+            <View>
+              <Text style={styles.greeting}>Welcome back 👋</Text>
+              <Text style={styles.name}>{user?.name?.split(" ")[0]}</Text>
+              {user?.phone ? (
+                <View style={styles.phoneRow}>
+                  <Feather name="phone" size={11} color="rgba(255,255,255,0.75)" />
+                  <Text style={styles.phoneTxt}>+91 {user.phone}</Text>
+                </View>
+              ) : null}
+            </View>
+            <View style={styles.headerActions}>
+              <TouchableOpacity style={styles.iconBtn} onPress={openNotifications}>
+                <Feather name="bell" size={18} color="#fff" />
+                {unreadCount > 0 && (
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText}>{unreadCount > 9 ? "9+" : unreadCount}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+              <View style={styles.themeRow}>
+                <Feather name={isDark ? "moon" : "sun"} size={15} color="rgba(255,255,255,0.8)" />
+                <Switch value={isDark} onValueChange={toggleTheme}
+                  trackColor={{ false: "rgba(255,255,255,0.3)", true: "rgba(255,255,255,0.5)" }}
+                  thumbColor="#fff"
+                />
+              </View>
+              <TouchableOpacity onPress={handleSignOut} style={styles.iconBtn}>
+                <Feather name="log-out" size={16} color="rgba(255,255,255,0.9)" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </SafeAreaView>
+      </View>
+
       <ScrollView
+        style={[styles.body, { backgroundColor: c.background }]}
         contentContainerStyle={[styles.container, { paddingBottom: bottomPad + 90 }]}
         refreshControl={<RefreshControl refreshing={false} onRefresh={onRefresh} tintColor={c.primary} />}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header */}
-        <View style={styles.headerRow}>
-          <View>
-            <Text style={[styles.greeting, { color: c.mutedForeground }]}>Welcome back 👋</Text>
-            <Text style={[styles.name, { color: c.foreground }]}>{user?.name?.split(" ")[0]}</Text>
-            {user?.phone ? (
-              <View style={styles.phoneRow}>
-                <Feather name="phone" size={11} color={c.mutedForeground} />
-                <Text style={[styles.phoneTxt, { color: c.mutedForeground }]}>+91 {user.phone}</Text>
-              </View>
-            ) : null}
-          </View>
-          <View style={styles.headerActions}>
-            <TouchableOpacity
-              style={[styles.iconBtn, { backgroundColor: c.muted }]}
-              onPress={openNotifications}
-            >
-              <Feather name="bell" size={18} color={unreadCount > 0 ? c.primary : c.mutedForeground} />
-              {unreadCount > 0 && (
-                <View style={[styles.badge, { backgroundColor: c.destructive }]}>
-                  <Text style={styles.badgeText}>{unreadCount > 9 ? "9+" : unreadCount}</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-            <View style={styles.themeRow}>
-              <Feather name={isDark ? "moon" : "sun"} size={15} color={c.mutedForeground} />
-              <Switch value={isDark} onValueChange={toggleTheme}
-                trackColor={{ false: c.muted, true: c.primary + "80" }}
-                thumbColor={isDark ? c.primary : c.mutedForeground}
-              />
-            </View>
-            <TouchableOpacity onPress={handleSignOut} style={[styles.iconBtn, { backgroundColor: c.muted }]}>
-              <Feather name="log-out" size={16} color={c.mutedForeground} />
-            </TouchableOpacity>
-          </View>
-        </View>
 
         {!loan ? (
           <View style={[styles.noLoanCard, { backgroundColor: c.card, borderColor: c.border }]}>
@@ -289,6 +294,17 @@ export default function UserDashboard() {
                 </View>
               </>
             )}
+
+            {/* View Schedule button */}
+            <TouchableOpacity
+              style={[styles.scheduleBtn, { borderColor: c.primary }]}
+              onPress={() => router.push("/(user)/schedule")}
+              activeOpacity={0.8}
+            >
+              <Feather name="calendar" size={16} color={c.primary} />
+              <Text style={[styles.scheduleBtnText, { color: c.primary }]}>View Full Repayment Schedule</Text>
+              <Feather name="chevron-right" size={16} color={c.primary} />
+            </TouchableOpacity>
 
             {loan.status === "completed" && (
               <View style={[styles.completedBanner, { backgroundColor: c.success + "22" }]}>
@@ -441,24 +457,43 @@ export default function UserDashboard() {
           </ScrollView>
         </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  root: { flex: 1 },
   flex: { flex: 1 },
   loading: { flex: 1, alignItems: "center", justifyContent: "center" },
-  container: { padding: 16, paddingTop: 16 },
-  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 },
-  greeting: { fontSize: 13, fontFamily: "Inter_400Regular" },
-  name: { fontSize: 26, fontFamily: "Inter_700Bold" },
+  // Green header
+  headerBg: { backgroundColor: "#00A86B", paddingBottom: 24, overflow: "hidden" },
+  circle1: {
+    position: "absolute", width: 200, height: 200, borderRadius: 100,
+    backgroundColor: "rgba(255,255,255,0.07)", top: -50, right: -50,
+  },
+  circle2: {
+    position: "absolute", width: 130, height: 130, borderRadius: 65,
+    backgroundColor: "rgba(255,255,255,0.06)", bottom: -30, left: 10,
+  },
+  headerContent: { paddingHorizontal: 16 },
+  body: { flex: 1, borderTopLeftRadius: 24, borderTopRightRadius: 24, marginTop: -20 },
+  container: { padding: 16 },
+  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", paddingVertical: 12 },
+  greeting: { fontSize: 13, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.8)" },
+  name: { fontSize: 26, fontFamily: "Inter_700Bold", color: "#fff" },
   phoneRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 3 },
-  phoneTxt: { fontSize: 11, fontFamily: "Inter_400Regular" },
+  phoneTxt: { fontSize: 11, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.75)" },
   headerActions: { flexDirection: "row", alignItems: "center", gap: 10 },
-  iconBtn: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center", position: "relative" },
-  badge: { position: "absolute", top: -4, right: -4, width: 18, height: 18, borderRadius: 9, alignItems: "center", justifyContent: "center" },
+  iconBtn: { width: 38, height: 38, borderRadius: 12, backgroundColor: "rgba(255,255,255,0.2)", alignItems: "center", justifyContent: "center", position: "relative" },
+  badge: { position: "absolute", top: -4, right: -4, width: 18, height: 18, borderRadius: 9, backgroundColor: "#EF4444", alignItems: "center", justifyContent: "center" },
   badgeText: { color: "#fff", fontSize: 10, fontFamily: "Inter_700Bold" },
   themeRow: { flexDirection: "row", alignItems: "center", gap: 4 },
+  // Schedule button
+  scheduleBtn: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    borderWidth: 1.5, borderRadius: 14, padding: 14, marginBottom: 16,
+  },
+  scheduleBtnText: { flex: 1, fontSize: 14, fontFamily: "Inter_600SemiBold" },
   noLoanCard: { borderRadius: 20, padding: 40, borderWidth: 1, alignItems: "center", gap: 12 },
   noLoanTitle: { fontSize: 20, fontFamily: "Inter_700Bold" },
   noLoanSub: { fontSize: 14, fontFamily: "Inter_400Regular", textAlign: "center" },
