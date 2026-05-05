@@ -11,6 +11,27 @@ env = { "CI" = "true" }
 [workflows]
 runButton = "Project"
 
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Loan Tracker"
+
+[[workflows.workflow]]
+name = "Loan Tracker"
+author = "agent"
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "PORT=20782 pnpm --filter @workspace/loan-tracker run dev"
+waitForPort = 20782
+
 [agent]
 stack = "PNPM_WORKSPACE"
 expertMode = true

@@ -16,13 +16,15 @@ import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
-import { sendPhoneOTP, setPendingUser } from "@/services/otpService";
+import { register } from "@/services/authService";
+import { useAuth } from "@/context/AuthContext";
 
 const { height: SCREEN_H } = Dimensions.get("window");
 const GREEN = "#00A86B";
 
 export default function RegisterScreen() {
   const c = useColors();
+  const { setUser } = useAuth();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -34,23 +36,23 @@ export default function RegisterScreen() {
   const validate = (): string | null => {
     if (!name.trim()) return "Please enter your full name.";
     if (!email.trim() || !/\S+@\S+\.\S+/.test(email)) return "Enter a valid email address.";
-    if (!/^\d{10}$/.test(phone.trim())) return "Phone number must be exactly 10 digits.";
+    if (phone.trim() && !/^\d{10}$/.test(phone.trim())) return "Phone number must be exactly 10 digits.";
     if (password.length < 6) return "Password must be at least 6 characters.";
     return null;
   };
 
-  const handleSendOTP = async () => {
+  const handleRegister = async () => {
     const err = validate();
     if (err) { setError(err); return; }
     setError("");
     setLoading(true);
     try {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      setPendingUser({ name: name.trim(), email: email.trim(), password, phone: phone.trim() });
-      await sendPhoneOTP(phone.trim());
-      router.push("/otp");
+      const profile = await register(name.trim(), email.trim(), password, phone.trim() || undefined);
+      setUser(profile);
+      router.replace("/(user)/dashboard");
     } catch (e: any) {
-      setError(e?.message ?? "Failed to send OTP. Please try again.");
+      setError(e?.message ?? "Registration failed. Please try again.");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setLoading(false);
@@ -129,7 +131,7 @@ export default function RegisterScreen() {
 
           {/* Phone */}
           <View style={styles.fieldGroup}>
-            <Text style={[styles.fieldLabel, { color: c.mutedForeground }]}>Phone Number</Text>
+            <Text style={[styles.fieldLabel, { color: c.mutedForeground }]}>Phone Number (optional)</Text>
             <View style={[styles.inputWrapper, { borderColor: c.border, backgroundColor: c.muted }]}>
               <Feather name="phone" size={16} color={c.mutedForeground} />
               <View style={[styles.phonePrefix, { borderRightColor: c.border }]}>
@@ -169,17 +171,9 @@ export default function RegisterScreen() {
             </View>
           </View>
 
-          {/* OTP Notice */}
-          <View style={[styles.otpNotice, { backgroundColor: GREEN + "12", borderColor: GREEN + "30" }]}>
-            <Feather name="shield" size={14} color={GREEN} />
-            <Text style={[styles.otpNoticeText, { color: GREEN }]}>
-              An OTP will be sent to your mobile number to verify your identity before account creation.
-            </Text>
-          </View>
-
           <TouchableOpacity
             style={[styles.registerBtn, loading && { opacity: 0.75 }]}
-            onPress={handleSendOTP}
+            onPress={handleRegister}
             disabled={loading}
             activeOpacity={0.85}
           >
@@ -187,8 +181,8 @@ export default function RegisterScreen() {
               <ActivityIndicator color="#fff" />
             ) : (
               <>
-                <Feather name="send" size={17} color="#fff" />
-                <Text style={styles.registerBtnText}>Send OTP & Continue</Text>
+                <Feather name="user-plus" size={17} color="#fff" />
+                <Text style={styles.registerBtnText}>Create Account</Text>
               </>
             )}
           </TouchableOpacity>
@@ -251,11 +245,6 @@ const styles = StyleSheet.create({
   phonePrefix: { paddingRight: 8, borderRightWidth: 1, marginRight: 2 },
   prefixText: { fontSize: 14, fontFamily: "Inter_500Medium" },
   input: { flex: 1, fontSize: 15, fontFamily: "Inter_400Regular" },
-  otpNotice: {
-    flexDirection: "row", alignItems: "flex-start", gap: 8,
-    padding: 12, borderRadius: 12, borderWidth: 1,
-  },
-  otpNoticeText: { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 18 },
   registerBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center",
     gap: 8, borderRadius: 14, paddingVertical: 16,
