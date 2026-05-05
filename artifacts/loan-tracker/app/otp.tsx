@@ -18,7 +18,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/context/AuthContext";
 import { register } from "@/services/authService";
-import { verifyOTP, getPendingUser, clearPendingUser } from "@/services/otpService";
+import { verifyOTP, getPendingUser, clearPendingUser, getOtpMode, getLoginPhone } from "@/services/otpService";
+import { getUserByPhone } from "@/services/userService";
 
 const { height: SCREEN_H } = Dimensions.get("window");
 const GREEN = "#00A86B";
@@ -34,10 +35,15 @@ export default function OTPScreen() {
   const inputRefs = useRef<(TextInput | null)[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const mode = getOtpMode();
   const pending = getPendingUser();
+  const loginPhone = getLoginPhone();
+
+  const displayPhone = mode === "login"
+    ? (loginPhone ? `+91 XXXXX-X${loginPhone.slice(-4)}` : "+91 XXXXXXXXXX")
+    : (pending?.phone ? `+91 XXXXX-X${pending.phone.slice(-4)}` : "+91 XXXXXXXXXX");
 
   useEffect(() => {
-    // Start countdown
     timerRef.current = setInterval(() => {
       setResendCooldown((v) => {
         if (v <= 1) { clearInterval(timerRef.current!); return 0; }
@@ -81,19 +87,39 @@ export default function OTPScreen() {
       setError(`Please enter all ${OTP_LENGTH} digits.`);
       return;
     }
-    if (!pending) {
-      setError("Session expired. Please register again.");
-      return;
-    }
     setError("");
     setLoading(true);
     try {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       await verifyOTP(code);
-      const profile = await register(pending.name, pending.email, pending.password, pending.phone);
-      clearPendingUser();
-      setUser(profile);
-      router.replace("/(user)/dashboard");
+
+      if (mode === "login") {
+        // Look up user by phone number
+        const profile = await getUserByPhone(loginPhone);
+        if (!profile) {
+          setError("No account found with this phone number. Please register first.");
+          setLoading(false);
+          return;
+        }
+        clearPendingUser();
+        setUser(profile);
+        if (profile.role === "admin") {
+          router.replace("/(admin)/dashboard");
+        } else {
+          router.replace("/(user)/dashboard");
+        }
+      } else {
+        // Register mode
+        if (!pending) {
+          setError("Session expired. Please register again.");
+          setLoading(false);
+          return;
+        }
+        const profile = await register(pending.name, pending.email, pending.password, pending.phone);
+        clearPendingUser();
+        setUser(profile);
+        router.replace("/(user)/dashboard");
+      }
     } catch (e: any) {
       setError(e?.message ?? "Verification failed. Please try again.");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -105,8 +131,6 @@ export default function OTPScreen() {
   const handleResend = () => {
     router.back();
   };
-
-  const maskedPhone = pending?.phone ? `+91 XXXXX-X${pending.phone.slice(-4)}` : "+91 XXXXXXXXXX";
 
   return (
     <KeyboardAvoidingView
@@ -130,9 +154,11 @@ export default function OTPScreen() {
             <View style={styles.iconCircle}>
               <Feather name="smartphone" size={28} color={GREEN} />
             </View>
-            <Text style={styles.heading}>Verify Phone</Text>
+            <Text style={styles.heading}>
+              {mode === "login" ? "Verify to Login" : "Verify Phone"}
+            </Text>
             <Text style={styles.subheading}>Enter the 6-digit OTP sent to</Text>
-            <Text style={styles.phoneDisplay}>{maskedPhone}</Text>
+            <Text style={styles.phoneDisplay}>{displayPhone}</Text>
           </SafeAreaView>
         </View>
 
@@ -187,7 +213,9 @@ export default function OTPScreen() {
             ) : (
               <>
                 <Feather name="shield" size={18} color="#fff" />
-                <Text style={styles.verifyBtnText}>Verify & Create Account</Text>
+                <Text style={styles.verifyBtnText}>
+                  {mode === "login" ? "Verify & Sign In" : "Verify & Create Account"}
+                </Text>
               </>
             )}
           </TouchableOpacity>

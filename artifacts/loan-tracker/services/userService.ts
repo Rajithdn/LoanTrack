@@ -18,6 +18,13 @@ export async function getAllUsers(): Promise<UserProfile[]> {
   return snap.docs.map((d) => d.data() as UserProfile);
 }
 
+export async function getUserByPhone(phone: string): Promise<UserProfile | null> {
+  const q = query(collection(db, "users"), where("phone", "==", phone));
+  const snap = await getDocs(q);
+  if (snap.empty) return null;
+  return snap.docs[0].data() as UserProfile;
+}
+
 export async function addUser(
   name: string,
   email: string,
