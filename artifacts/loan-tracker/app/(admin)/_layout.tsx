@@ -63,6 +63,13 @@ export default function AdminLayout() {
           tabBarIcon: ({ color }) => <Feather name="credit-card" size={22} color={color} />,
         }}
       />
+      <Tabs.Screen
+        name="calculator"
+        options={{
+          title: "Calculator",
+          tabBarIcon: ({ color }) => <Feather name="calculator" size={22} color={color} />,
+        }}
+      />
     </Tabs>
   );
 }

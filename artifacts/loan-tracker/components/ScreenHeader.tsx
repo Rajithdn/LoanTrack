@@ -1,8 +1,10 @@
 import React from "react";
-import { Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
-import { useColors } from "@/hooks/useColors";
+
+const GREEN = "#00A86B";
+const GREEN_DARK = "#007A4D";
 
 interface ScreenHeaderProps {
   title: string;
@@ -12,37 +14,53 @@ interface ScreenHeaderProps {
 }
 
 export function ScreenHeader({ title, subtitle, right, onBack }: ScreenHeaderProps) {
-  const c = useColors();
-  const insets = useSafeAreaInsets();
-  const topPad = Platform.OS === "web" ? 67 : insets.top;
-
   return (
-    <View style={[styles.header, { paddingTop: topPad + 12, backgroundColor: c.background, borderBottomColor: c.border }]}>
-      <View style={styles.row}>
-        {onBack && (
-          <TouchableOpacity onPress={onBack} style={styles.backBtn}>
-            <Feather name="arrow-left" size={22} color={c.foreground} />
-          </TouchableOpacity>
-        )}
-        <View style={styles.titles}>
-          <Text style={[styles.title, { color: c.foreground }]}>{title}</Text>
-          {subtitle ? <Text style={[styles.subtitle, { color: c.mutedForeground }]}>{subtitle}</Text> : null}
+    <View style={styles.headerBg}>
+      <View style={styles.circle1} />
+      <View style={styles.circle2} />
+      <SafeAreaView edges={["top"]} style={styles.safeArea}>
+        <View style={styles.row}>
+          {onBack && (
+            <TouchableOpacity onPress={onBack} style={styles.backBtn}>
+              <Feather name="arrow-left" size={22} color="#fff" />
+            </TouchableOpacity>
+          )}
+          <View style={styles.titles}>
+            <Text style={styles.title}>{title}</Text>
+            {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+          </View>
+          {right && <View>{right}</View>}
         </View>
-        {right && <View>{right}</View>}
-      </View>
+      </SafeAreaView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  header: {
-    paddingHorizontal: 20,
-    paddingBottom: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+  headerBg: {
+    backgroundColor: GREEN,
+    paddingBottom: 20,
+    overflow: "hidden",
   },
-  row: { flexDirection: "row", alignItems: "center", gap: 12 },
-  backBtn: { padding: 4, marginRight: 4 },
+  circle1: {
+    position: "absolute", width: 180, height: 180, borderRadius: 90,
+    backgroundColor: "rgba(255,255,255,0.07)", top: -50, right: -40,
+  },
+  circle2: {
+    position: "absolute", width: 110, height: 110, borderRadius: 55,
+    backgroundColor: "rgba(255,255,255,0.06)", bottom: -20, left: 20,
+  },
+  safeArea: { paddingHorizontal: 20, paddingTop: 8 },
+  row: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    paddingVertical: 8,
+  },
+  backBtn: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    alignItems: "center", justifyContent: "center",
+  },
   titles: { flex: 1 },
-  title: { fontSize: 24, fontFamily: "Inter_700Bold" },
-  subtitle: { fontSize: 13, fontFamily: "Inter_400Regular", marginTop: 2 },
+  title: { fontSize: 24, fontFamily: "Inter_700Bold", color: "#fff" },
+  subtitle: { fontSize: 13, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.8)", marginTop: 2 },
 });

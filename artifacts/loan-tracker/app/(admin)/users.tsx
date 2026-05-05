@@ -91,17 +91,18 @@ export default function UsersScreen() {
   const bottomPad = Platform.OS === "web" ? 34 : insets.bottom;
 
   return (
-    <View style={[styles.flex, { backgroundColor: c.background }]}>
+    <View style={[styles.flex, { backgroundColor: "#00A86B" }]}>
       <ScreenHeader
         title="Borrowers"
         subtitle={`${users.length} total`}
         right={
-          <TouchableOpacity style={[styles.addBtn, { backgroundColor: c.primary }]} onPress={openAdd}>
+          <TouchableOpacity style={[styles.addBtn, { backgroundColor: "rgba(255,255,255,0.25)" }]} onPress={openAdd}>
             <Feather name="plus" size={18} color="#fff" />
           </TouchableOpacity>
         }
       />
 
+      <View style={[styles.body, { backgroundColor: c.background }]}>
       <View style={[styles.searchRow, { paddingHorizontal: 20 }]}>
         <View style={[styles.searchBox, { backgroundColor: c.muted, borderColor: c.border }]}>
           <Feather name="search" size={16} color={c.mutedForeground} />
@@ -163,6 +164,8 @@ export default function UsersScreen() {
           )}
         />
       )}
+
+      </View>{/* end body */}
 
       <Modal visible={modalVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={closeModal}>
         <View style={[styles.modalContent, { backgroundColor: c.background }]}>
@@ -266,6 +269,7 @@ export default function UsersScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  body: { flex: 1, borderTopLeftRadius: 24, borderTopRightRadius: 24, marginTop: -20, overflow: "hidden" },
   addBtn: { width: 38, height: 38, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   searchRow: { paddingVertical: 12 },
   searchBox: { flexDirection: "row", alignItems: "center", gap: 8, borderRadius: 10, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 10 },

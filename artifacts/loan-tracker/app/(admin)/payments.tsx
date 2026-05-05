@@ -95,7 +95,7 @@ export default function PaymentsScreen() {
   const bottomPad = Platform.OS === "web" ? 34 : insets.bottom;
 
   return (
-    <View style={[styles.flex, { backgroundColor: c.background }]}>
+    <View style={[styles.flex, { backgroundColor: "#00A86B" }]}>
       {notification && (
         <NotificationBanner
           message={notification.msg}
@@ -106,6 +106,7 @@ export default function PaymentsScreen() {
 
       <ScreenHeader title="Payments" subtitle="Review & approve" />
 
+      <View style={[styles.body, { backgroundColor: c.background }]}>
       {/* Stats row */}
       <View style={[styles.statsRow, { paddingHorizontal: 20, borderBottomColor: c.border }]}>
         <View style={[styles.statBox, { backgroundColor: c.warning + "18" }]}>
@@ -179,6 +180,8 @@ export default function PaymentsScreen() {
           }}
         />
       )}
+
+      </View>{/* end body */}
 
       {/* Confirm Modal */}
       <Modal
@@ -302,6 +305,7 @@ export default function PaymentsScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  body: { flex: 1, borderTopLeftRadius: 24, borderTopRightRadius: 24, marginTop: -20, overflow: "hidden" },
   statsRow: { flexDirection: "row", gap: 10, paddingVertical: 14 },
   statBox: { flex: 1, alignItems: "center", paddingVertical: 10, borderRadius: 12 },
   statNum: { fontSize: 20, fontFamily: "Inter_700Bold" },

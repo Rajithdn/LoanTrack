@@ -70,17 +70,18 @@ export default function LoansScreen() {
   const bottomPad = Platform.OS === "web" ? 34 : insets.bottom;
 
   return (
-    <View style={[styles.flex, { backgroundColor: c.background }]}>
+    <View style={[styles.flex, { backgroundColor: "#00A86B" }]}>
       <ScreenHeader
         title="Loans"
         subtitle={`${loans.length} total`}
         right={
-          <TouchableOpacity style={[styles.addBtn, { backgroundColor: c.primary }]} onPress={() => setModalVisible(true)}>
+          <TouchableOpacity style={[styles.addBtn, { backgroundColor: "rgba(255,255,255,0.25)" }]} onPress={() => setModalVisible(true)}>
             <Feather name="plus" size={18} color="#fff" />
           </TouchableOpacity>
         }
       />
 
+      <View style={[styles.body, { backgroundColor: c.background }]}>
       {/* Filters */}
       <View style={[styles.filterRow, { paddingHorizontal: 20 }]}>
         {(["all", "active", "completed"] as const).map((f) => (
@@ -113,6 +114,8 @@ export default function LoansScreen() {
           renderItem={({ item }) => <LoanCard loan={item} userName={item.userName} />}
         />
       )}
+
+      </View>{/* end body */}
 
       {/* Add Loan Modal */}
       <Modal visible={modalVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setModalVisible(false)}>
@@ -231,6 +234,7 @@ export default function LoansScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  body: { flex: 1, borderTopLeftRadius: 24, borderTopRightRadius: 24, marginTop: -20, overflow: "hidden" },
   addBtn: { width: 38, height: 38, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   filterRow: { flexDirection: "row", gap: 8, paddingVertical: 12 },
   filterBtn: { paddingHorizontal: 16, paddingVertical: 7, borderRadius: 100 },
