@@ -88,13 +88,15 @@ export default function LoginScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.flex}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
     >
       <ScrollView
         style={styles.flex}
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
         bounces={false}
+        showsVerticalScrollIndicator={false}
       >
         {/* Green header */}
         <View style={styles.header}>
@@ -180,8 +182,12 @@ export default function LoginScreen() {
                     onChangeText={setPassword}
                     secureTextEntry={!showPass}
                   />
-                  <TouchableOpacity onPress={() => setShowPass(!showPass)}>
-                    <Feather name={showPass ? "eye-off" : "eye"} size={16} color={c.mutedForeground} />
+                  <TouchableOpacity
+                    onPress={() => setShowPass((p) => !p)}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    activeOpacity={0.6}
+                  >
+                    <Feather name={showPass ? "eye-off" : "eye"} size={18} color={c.mutedForeground} />
                   </TouchableOpacity>
                 </View>
               </View>

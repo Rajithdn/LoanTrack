@@ -16,7 +16,7 @@ import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
-import { setPendingUser, setOtpMode, generateMockCode } from "@/services/otpService";
+import { setPendingUser, setOtpMode, generateOTPCode, storeOTP } from "@/services/otpService";
 
 const { height: SCREEN_H } = Dimensions.get("window");
 const GREEN = "#00A86B";
@@ -46,8 +46,12 @@ export default function RegisterScreen() {
     setLoading(true);
     try {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      const code = generateOTPCode();
+      // Store OTP in Firestore (keyed by email), NOT shown in UI
+      await storeOTP(email.trim(), code);
+      // In production: send via SMS/email API. For dev, log to console only.
+      if (__DEV__) console.log("[DEV] OTP for", email.trim(), ":", code);
       setPendingUser({ name: name.trim(), email: email.trim(), password, phone: phone.trim() });
-      generateMockCode();
       setOtpMode("mock_register");
       router.push("/otp");
     } catch (e: any) {
@@ -61,13 +65,14 @@ export default function RegisterScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.flex}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       <ScrollView
         style={styles.flex}
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
         bounces={false}
+        showsVerticalScrollIndicator={false}
       >
         {/* Green header */}
         <View style={styles.header}>
@@ -161,9 +166,14 @@ export default function RegisterScreen() {
                 value={password}
                 onChangeText={(v) => { setPassword(v); setError(""); }}
                 secureTextEntry={!showPass}
+                autoCorrect={false}
               />
-              <TouchableOpacity onPress={() => setShowPass(!showPass)}>
-                <Feather name={showPass ? "eye-off" : "eye"} size={16} color={c.mutedForeground} />
+              <TouchableOpacity
+                onPress={() => setShowPass((p) => !p)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                activeOpacity={0.6}
+              >
+                <Feather name={showPass ? "eye-off" : "eye"} size={18} color={c.mutedForeground} />
               </TouchableOpacity>
             </View>
           </View>
@@ -200,8 +210,11 @@ const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: GREEN },
   scroll: { flexGrow: 1 },
   header: {
-    backgroundColor: GREEN, paddingBottom: 60,
-    minHeight: SCREEN_H * 0.34, justifyContent: "flex-end", overflow: "hidden",
+    backgroundColor: GREEN,
+    paddingBottom: 60,
+    minHeight: SCREEN_H * 0.34,
+    justifyContent: "flex-end",
+    overflow: "hidden",
   },
   circle1: { position: "absolute", width: 200, height: 200, borderRadius: 100, backgroundColor: "rgba(255,255,255,0.08)", top: -50, right: -50 },
   circle2: { position: "absolute", width: 130, height: 130, borderRadius: 65, backgroundColor: "rgba(255,255,255,0.06)", top: 30, left: -40 },

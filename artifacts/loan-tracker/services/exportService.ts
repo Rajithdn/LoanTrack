@@ -119,11 +119,25 @@ export async function exportLoansCSV(loans: Loan[], users: UserProfile[], paymen
   }
 
   const fileName = `LoanTracker_Report_${new Date().toISOString().slice(0, 10)}.csv`;
-  const dir = FileSystem.documentDirectory ?? FileSystem.cacheDirectory ?? "";
-  if (!dir) throw new Error("File storage is not available on this device.");
+  const dir = FileSystem.documentDirectory ?? FileSystem.cacheDirectory;
+  if (!dir) {
+    // Last resort: open as data URI in browser
+    const dataUri = `data:text/csv;charset=utf-8,${encodeURIComponent(csv)}`;
+    if (typeof window !== "undefined") window.open(dataUri, "_blank");
+    return;
+  }
   const path = dir + fileName;
   await FileSystem.writeAsStringAsync(path, csv, { encoding: FileSystem.EncodingType.UTF8 });
-  const isAvailable = await Sharing.isAvailableAsync();
-  if (!isAvailable) throw new Error("Sharing is not supported on this device.");
-  await Sharing.shareAsync(path, { mimeType: "text/csv", dialogTitle: "Export Full Report" });
+  try {
+    const isAvailable = await Sharing.isAvailableAsync();
+    if (isAvailable) {
+      await Sharing.shareAsync(path, { mimeType: "text/csv", dialogTitle: "Export Full Report" });
+    } else {
+      // Sharing not available — file is saved, inform caller via resolved promise
+      console.info("CSV saved to:", path);
+    }
+  } catch {
+    // Sharing threw but file is written — not a fatal error
+    console.info("CSV saved to:", path);
+  }
 }

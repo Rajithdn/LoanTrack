@@ -17,7 +17,14 @@ import * as Haptics from "expo-haptics";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
 import { register, signOut } from "@/services/authService";
-import { verifyOTP, getPendingUser, clearPendingUser, getOtpMode, getLoginPhone, getMockCode } from "@/services/otpService";
+import {
+  verifyOTP,
+  verifyStoredOTP,
+  getPendingUser,
+  clearPendingUser,
+  getOtpMode,
+  getLoginPhone,
+} from "@/services/otpService";
 import { getUserByPhone } from "@/services/userService";
 
 const { height: SCREEN_H } = Dimensions.get("window");
@@ -37,15 +44,14 @@ export default function OTPScreen() {
   const mode = getOtpMode();
   const pending = getPendingUser();
   const loginPhone = getLoginPhone();
-  const mockCode = getMockCode();
-
   const isMock = mode === "mock_register" || mode === "mock_forgot";
 
   const displayPhone = mode === "login"
-    ? (loginPhone ? `+91 XXXXX-X${loginPhone.slice(-4)}` : "+91 XXXXXXXXXX")
-    : (pending?.phone ? `+91 XXXXX-X${pending.phone.slice(-4)}` : "+91 XXXXXXXXXX");
+    ? (loginPhone ? `+91 XXXXX${loginPhone.slice(-4)}` : "+91 XXXXXXXXXX")
+    : (pending?.phone ? `+91 XXXXX${pending.phone.slice(-4)}` : null);
 
   useEffect(() => {
+    if (isMock) return; // no countdown for Firestore OTP
     timerRef.current = setInterval(() => {
       setResendCooldown((v) => {
         if (v <= 1) { clearInterval(timerRef.current!); return 0; }
@@ -61,9 +67,7 @@ export default function OTPScreen() {
     next[idx] = digit;
     setOtp(next);
     setError("");
-    if (digit && idx < OTP_LENGTH - 1) {
-      inputRefs.current[idx + 1]?.focus();
-    }
+    if (digit && idx < OTP_LENGTH - 1) inputRefs.current[idx + 1]?.focus();
   };
 
   const handleKeyPress = (key: string, idx: number) => {
@@ -85,27 +89,16 @@ export default function OTPScreen() {
 
   const handleVerify = async () => {
     const code = otp.join("");
-    if (code.length < OTP_LENGTH) {
-      setError(`Please enter all ${OTP_LENGTH} digits.`);
-      return;
-    }
+    if (code.length < OTP_LENGTH) { setError(`Please enter all ${OTP_LENGTH} digits.`); return; }
     setError("");
     setLoading(true);
     try {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
       if (mode === "mock_register") {
-        if (code !== mockCode) {
-          setError("Incorrect OTP. Please check the code shown above and try again.");
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-          setLoading(false);
-          return;
-        }
-        if (!pending) {
-          setError("Session expired. Please register again.");
-          setLoading(false);
-          return;
-        }
+        // Verify OTP stored in Firestore (keyed by email)
+        if (!pending) { setError("Session expired. Please register again."); setLoading(false); return; }
+        await verifyStoredOTP(pending.email, code);
         await register(pending.name, pending.email, pending.password, pending.phone);
         await signOut();
         clearPendingUser();
@@ -115,31 +108,18 @@ export default function OTPScreen() {
         return;
       }
 
+      // Firebase phone OTP flow (login)
       await verifyOTP(code);
-
       if (mode === "login") {
         const profile = await getUserByPhone(loginPhone);
-        if (!profile) {
-          setError("No account found with this phone number. Please register first.");
-          setLoading(false);
-          return;
-        }
+        if (!profile) { setError("No account found with this phone number. Please register first."); setLoading(false); return; }
         clearPendingUser();
-        if (profile.role === "admin") {
-          router.replace("/(admin)/dashboard");
-        } else {
-          router.replace("/(user)/dashboard");
-        }
+        router.replace(profile.role === "admin" ? "/(admin)/dashboard" : "/(user)/dashboard");
       } else {
-        if (!pending) {
-          setError("Session expired. Please register again.");
-          setLoading(false);
-          return;
-        }
-        const profile = await register(pending.name, pending.email, pending.password, pending.phone);
+        if (!pending) { setError("Session expired. Please register again."); setLoading(false); return; }
+        await register(pending.name, pending.email, pending.password, pending.phone);
         clearPendingUser();
         await signOut();
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         setSuccess("Account created! Redirecting to sign in…");
         setTimeout(() => router.replace("/login"), 1800);
       }
@@ -151,20 +131,17 @@ export default function OTPScreen() {
     }
   };
 
-  const handleResend = () => {
-    router.back();
-  };
-
   return (
     <KeyboardAvoidingView
       style={styles.flex}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       <ScrollView
         style={styles.flex}
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
         bounces={false}
+        showsVerticalScrollIndicator={false}
       >
         {/* Green header */}
         <View style={styles.header}>
@@ -178,35 +155,32 @@ export default function OTPScreen() {
               <Feather name="smartphone" size={28} color={GREEN} />
             </View>
             <Text style={styles.heading}>
-              {mode === "login" ? "Verify to Login" : "Verify Account"}
+              {mode === "login" ? "Verify to Sign In" : "Verify Account"}
             </Text>
             <Text style={styles.subheading}>
-              {isMock ? "Enter the 6-digit code shown below" : `Enter the 6-digit OTP sent to`}
+              {isMock
+                ? "A 6-digit OTP has been sent to your registered contact"
+                : "Enter the 6-digit OTP sent to"}
             </Text>
-            {!isMock && <Text style={styles.phoneDisplay}>{displayPhone}</Text>}
+            {!isMock && displayPhone && (
+              <Text style={styles.phoneDisplay}>{displayPhone}</Text>
+            )}
           </SafeAreaView>
         </View>
 
         {/* OTP Form */}
         <View style={[styles.formCard, { backgroundColor: c.card }]}>
 
-          {/* Mock OTP hint banner */}
-          {isMock && mockCode ? (
-            <View style={[styles.mockBanner, { backgroundColor: GREEN + "12", borderColor: GREEN + "30" }]}>
-              <View style={[styles.mockIconBox, { backgroundColor: GREEN + "20" }]}>
-                <Feather name="message-square" size={16} color={GREEN} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.mockLabel, { color: c.mutedForeground }]}>Your verification code</Text>
-                <Text style={[styles.mockCode, { color: GREEN }]}>{mockCode}</Text>
-              </View>
-              <View style={[styles.mockBadge, { backgroundColor: GREEN }]}>
-                <Text style={styles.mockBadgeText}>IN-APP</Text>
-              </View>
+          {/* Info banner for mock/Firestore OTP */}
+          {isMock && (
+            <View style={[styles.infoBanner, { backgroundColor: GREEN + "12", borderColor: GREEN + "30" }]}>
+              <Feather name="shield" size={14} color={GREEN} />
+              <Text style={[styles.infoText, { color: GREEN }]}>
+                Check your registered contact for the verification code. Enter it below to proceed.
+              </Text>
             </View>
-          ) : null}
+          )}
 
-          {/* Success state */}
           {success ? (
             <View style={[styles.successBox, { backgroundColor: GREEN + "12", borderColor: GREEN + "30" }]}>
               <Feather name="check-circle" size={16} color={GREEN} />
@@ -221,7 +195,7 @@ export default function OTPScreen() {
             </View>
           ) : null}
 
-          <Text style={[styles.otpLabel, { color: c.mutedForeground }]}>Enter OTP</Text>
+          <Text style={[styles.otpLabel, { color: c.mutedForeground }]}>Enter Verification Code</Text>
 
           {/* 6 OTP boxes */}
           <View style={styles.otpRow}>
@@ -271,7 +245,7 @@ export default function OTPScreen() {
             )}
           </TouchableOpacity>
 
-          {/* Resend row */}
+          {/* Resend (only for real Firebase OTP) */}
           {!isMock && (
             <View style={styles.resendRow}>
               {resendCooldown > 0 ? (
@@ -279,20 +253,25 @@ export default function OTPScreen() {
                   Resend OTP in <Text style={{ color: GREEN, fontFamily: "Inter_700Bold" }}>{resendCooldown}s</Text>
                 </Text>
               ) : (
-                <TouchableOpacity onPress={handleResend}>
+                <TouchableOpacity onPress={() => router.back()}>
                   <Text style={[styles.resendLink, { color: GREEN }]}>Resend OTP</Text>
                 </TouchableOpacity>
               )}
             </View>
           )}
 
+          {/* Go back link for mock */}
+          {isMock && (
+            <TouchableOpacity onPress={() => router.back()} style={styles.resendRow}>
+              <Text style={[styles.resendLink, { color: c.mutedForeground }]}>← Go back and try again</Text>
+            </TouchableOpacity>
+          )}
+
           {/* Security note */}
           <View style={[styles.secureNote, { backgroundColor: c.muted }]}>
             <Feather name="lock" size={13} color={c.mutedForeground} />
             <Text style={[styles.secureNoteText, { color: c.mutedForeground }]}>
-              {isMock
-                ? "This is an in-app verification code. Enter the code shown above to continue."
-                : "Your OTP is valid for 10 minutes. Never share it with anyone."}
+              Your verification code expires in 10 minutes. Never share it with anyone.
             </Text>
           </View>
         </View>
@@ -318,15 +297,11 @@ const styles = StyleSheet.create({
     shadowColor: "#000", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.2, shadowRadius: 16, elevation: 10,
   },
   heading: { fontSize: 26, fontFamily: "Inter_700Bold", color: "#fff", marginBottom: 6 },
-  subheading: { fontSize: 14, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.8)" },
+  subheading: { fontSize: 14, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.8)", textAlign: "center" },
   phoneDisplay: { fontSize: 16, fontFamily: "Inter_700Bold", color: "#fff", marginTop: 4 },
   formCard: { flex: 1, borderTopLeftRadius: 32, borderTopRightRadius: 32, padding: 28, paddingTop: 32, gap: 18 },
-  mockBanner: { flexDirection: "row", alignItems: "center", gap: 12, padding: 14, borderRadius: 14, borderWidth: 1 },
-  mockIconBox: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
-  mockLabel: { fontSize: 11, fontFamily: "Inter_500Medium", marginBottom: 2 },
-  mockCode: { fontSize: 26, fontFamily: "Inter_700Bold", letterSpacing: 6 },
-  mockBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
-  mockBadgeText: { color: "#fff", fontSize: 9, fontFamily: "Inter_700Bold" },
+  infoBanner: { flexDirection: "row", alignItems: "flex-start", gap: 10, padding: 14, borderRadius: 12, borderWidth: 1 },
+  infoText: { flex: 1, fontSize: 13, fontFamily: "Inter_400Regular", lineHeight: 20 },
   successBox: { flexDirection: "row", alignItems: "center", gap: 8, padding: 12, borderRadius: 10, borderWidth: 1 },
   successText: { flex: 1, fontSize: 13, fontFamily: "Inter_600SemiBold" },
   errorBox: { flexDirection: "row", alignItems: "flex-start", gap: 8, padding: 12, borderRadius: 10, borderWidth: 1 },

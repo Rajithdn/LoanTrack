@@ -17,17 +17,18 @@ import * as Haptics from "expo-haptics";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
 import { resetPassword } from "@/services/authService";
-import { getUserByEmail } from "@/services/userService";
+import { getUserByPhone } from "@/services/userService";
+import { generateOTPCode, storeOTP, verifyStoredOTP } from "@/services/otpService";
 
 const { height: SCREEN_H } = Dimensions.get("window");
 const GREEN = "#00A86B";
-type Step = "email" | "verify" | "password" | "done";
+type Step = "phone" | "verify" | "password" | "done";
 
 export default function ForgotPasswordScreen() {
   const c = useColors();
-  const [step, setStep] = useState<Step>("email");
-  const [email, setEmail] = useState("");
-  const [mockCode] = useState(() => String(Math.floor(100000 + Math.random() * 900000)));
+  const [step, setStep] = useState<Step>("phone");
+  const [phone, setPhone] = useState("");
+  const [foundEmail, setFoundEmail] = useState("");
   const [enteredCode, setEnteredCode] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -36,39 +37,48 @@ export default function ForgotPasswordScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const handleEmailSubmit = async () => {
-    if (!email.trim() || !/\S+@\S+\.\S+/.test(email)) {
-      setError("Please enter a valid email address.");
-      return;
-    }
+  // ── Step 1: verify phone & send OTP ─────────────────────────────────────────
+  const handlePhoneSubmit = async () => {
+    const cleaned = phone.replace(/[^0-9]/g, "");
+    if (cleaned.length !== 10) { setError("Enter a valid 10-digit phone number."); return; }
     setError("");
     setLoading(true);
     try {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      const user = await getUserByEmail(email.trim().toLowerCase());
-      if (!user) {
-        setError("No account found with this email address.");
-        return;
-      }
+      const user = await getUserByPhone(cleaned);
+      if (!user) { setError("No account found with this phone number. Please check and try again."); return; }
+      const code = generateOTPCode();
+      await storeOTP(cleaned, code);
+      // In production: send via SMS gateway. For dev, log to console only.
+      if (__DEV__) console.log("[DEV] Forgot-password OTP for", cleaned, ":", code);
+      setFoundEmail(user.email);
       setStep("verify");
-    } catch {
-      setError("Something went wrong. Please try again.");
+    } catch (e: any) {
+      setError(e?.message ?? "Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleVerifyCode = () => {
-    if (enteredCode.trim() !== mockCode) {
-      setError("Incorrect code. Please check and try again.");
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      return;
-    }
+  // ── Step 2: verify OTP ───────────────────────────────────────────────────────
+  const handleVerifyOtp = async () => {
+    if (enteredCode.trim().length !== 6) { setError("Enter the 6-digit code."); return; }
     setError("");
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setStep("password");
+    setLoading(true);
+    try {
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      await verifyStoredOTP(phone.replace(/[^0-9]/g, ""), enteredCode.trim());
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setStep("password");
+    } catch (e: any) {
+      setError(e?.message ?? "Verification failed. Please try again.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setLoading(false);
+    }
   };
 
+  // ── Step 3: set new password ─────────────────────────────────────────────────
   const handleSetPassword = async () => {
     if (newPassword.length < 6) { setError("Password must be at least 6 characters."); return; }
     if (newPassword !== confirmPassword) { setError("Passwords do not match."); return; }
@@ -76,35 +86,45 @@ export default function ForgotPasswordScreen() {
     setLoading(true);
     try {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      await resetPassword(email.trim());
+      await resetPassword(foundEmail);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setStep("done");
     } catch (e: any) {
-      setError(e?.message ?? "Failed. Please try again.");
+      setError(e?.message ?? "Failed to reset password. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
   const goBack = () => {
-    if (step === "email") router.back();
-    else if (step === "verify") { setStep("email"); setError(""); }
+    if (step === "phone") router.back();
+    else if (step === "verify") { setStep("phone"); setError(""); setEnteredCode(""); }
     else if (step === "password") { setStep("verify"); setError(""); }
   };
 
-  const stepIcons: Record<Step, any> = { email: "mail", verify: "shield", password: "lock", done: "check-circle" };
-  const stepTitles: Record<Step, string> = { email: "Forgot Password", verify: "Verify Identity", password: "Set New Password", done: "All Done!" };
+  const stepIcons: Record<Step, any> = { phone: "phone", verify: "shield", password: "lock", done: "check-circle" };
+  const stepTitles: Record<Step, string> = {
+    phone: "Forgot Password",
+    verify: "Verify Identity",
+    password: "Set New Password",
+    done: "All Done!",
+  };
   const stepSubs: Record<Step, string> = {
-    email: "Enter your registered email to begin",
-    verify: "Enter the verification code shown below",
+    phone: "Enter your registered mobile number",
+    verify: "Enter the OTP sent to your mobile",
     password: "Choose a strong new password",
-    done: "Your reset request has been submitted",
+    done: "Your reset request has been processed",
   };
 
   return (
-    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-      <ScrollView style={styles.flex} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" bounces={false}>
-
+    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+      <ScrollView
+        style={styles.flex}
+        contentContainerStyle={styles.scroll}
+        keyboardShouldPersistTaps="handled"
+        bounces={false}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Green header */}
         <View style={styles.header}>
           <View style={styles.circle1} />
@@ -122,8 +142,8 @@ export default function ForgotPasswordScreen() {
             <Text style={styles.subheading}>{stepSubs[step]}</Text>
             {step !== "done" && (
               <View style={styles.dots}>
-                {(["email", "verify", "password"] as Step[]).map((s, i) => {
-                  const order: Step[] = ["email", "verify", "password"];
+                {(["phone", "verify", "password"] as Step[]).map((s, i) => {
+                  const order: Step[] = ["phone", "verify", "password"];
                   const filled = i <= order.indexOf(step);
                   return <View key={s} style={[styles.dot, filled ? { backgroundColor: "#fff", width: 20 } : { backgroundColor: "rgba(255,255,255,0.35)" }]} />;
                 })}
@@ -141,28 +161,31 @@ export default function ForgotPasswordScreen() {
             </View>
           ) : null}
 
-          {/* STEP 1: Email */}
-          {step === "email" && (
+          {/* STEP 1: Phone */}
+          {step === "phone" && (
             <>
               <View style={styles.fieldGroup}>
-                <Text style={[styles.fieldLabel, { color: c.mutedForeground }]}>Email Address</Text>
+                <Text style={[styles.fieldLabel, { color: c.mutedForeground }]}>Registered Mobile Number</Text>
                 <View style={[styles.inputWrapper, { borderColor: c.border, backgroundColor: c.muted }]}>
-                  <Feather name="mail" size={16} color={c.mutedForeground} />
+                  <Feather name="phone" size={16} color={c.mutedForeground} />
+                  <View style={[styles.phonePrefix, { borderRightColor: c.border }]}>
+                    <Text style={[styles.prefixText, { color: c.mutedForeground }]}>+91</Text>
+                  </View>
                   <TextInput
                     style={[styles.input, { color: c.foreground }]}
-                    placeholder="Enter your registered email"
+                    placeholder="10-digit number"
                     placeholderTextColor={c.mutedForeground}
-                    value={email}
-                    onChangeText={(v) => { setEmail(v); setError(""); }}
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                    autoCorrect={false}
+                    value={phone}
+                    onChangeText={(v) => { setPhone(v.replace(/[^0-9]/g, "").slice(0, 10)); setError(""); }}
+                    keyboardType="phone-pad"
+                    maxLength={10}
                     autoFocus
                   />
+                  {phone.length === 10 && <Feather name="check-circle" size={16} color={GREEN} />}
                 </View>
               </View>
-              <TouchableOpacity style={[styles.actionBtn, loading && { opacity: 0.75 }]} onPress={handleEmailSubmit} disabled={loading} activeOpacity={0.85}>
-                {loading ? <ActivityIndicator color="#fff" /> : (<><Feather name="arrow-right" size={17} color="#fff" /><Text style={styles.actionBtnText}>Continue</Text></>)}
+              <TouchableOpacity style={[styles.actionBtn, loading && { opacity: 0.75 }]} onPress={handlePhoneSubmit} disabled={loading} activeOpacity={0.85}>
+                {loading ? <ActivityIndicator color="#fff" /> : (<><Feather name="send" size={17} color="#fff" /><Text style={styles.actionBtnText}>Send OTP</Text></>)}
               </TouchableOpacity>
               <TouchableOpacity onPress={() => router.back()} style={styles.cancelRow}>
                 <Text style={[styles.cancelText, { color: c.mutedForeground }]}>Remember your password? </Text>
@@ -171,48 +194,46 @@ export default function ForgotPasswordScreen() {
             </>
           )}
 
-          {/* STEP 2: Verify code */}
+          {/* STEP 2: OTP */}
           {step === "verify" && (
             <>
-              <View style={[styles.codeDisplay, { backgroundColor: GREEN + "12", borderColor: GREEN + "30" }]}>
-                <View style={[styles.codeIconBox, { backgroundColor: GREEN + "20" }]}>
-                  <Feather name="message-square" size={18} color={GREEN} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.codeLabel, { color: c.mutedForeground }]}>Your verification code</Text>
-                  <Text style={[styles.codeValue, { color: GREEN }]}>{mockCode}</Text>
-                </View>
-                <View style={[styles.codeBadge, { backgroundColor: GREEN }]}>
-                  <Text style={styles.codeBadgeText}>IN-APP</Text>
-                </View>
+              <View style={[styles.infoBanner, { backgroundColor: GREEN + "12", borderColor: GREEN + "30" }]}>
+                <Feather name="message-square" size={14} color={GREEN} />
+                <Text style={[styles.infoText, { color: GREEN }]}>
+                  OTP has been sent to <Text style={{ fontFamily: "Inter_700Bold" }}>+91 XXXXX{phone.slice(-5)}</Text>. Enter it below.
+                </Text>
               </View>
 
               <View style={styles.fieldGroup}>
-                <Text style={[styles.fieldLabel, { color: c.mutedForeground }]}>Enter Verification Code</Text>
-                <View style={[styles.inputWrapper, { borderColor: enteredCode.length === 6 ? GREEN : c.border, backgroundColor: c.muted }]}>
+                <Text style={[styles.fieldLabel, { color: c.mutedForeground }]}>Enter OTP</Text>
+                <View style={[styles.inputWrapper, {
+                  borderColor: enteredCode.length === 6 ? GREEN : c.border,
+                  backgroundColor: c.muted,
+                }]}>
                   <Feather name="hash" size={16} color={c.mutedForeground} />
                   <TextInput
                     style={[styles.input, { color: c.foreground, letterSpacing: 5, fontSize: 20, fontFamily: "Inter_700Bold" }]}
-                    placeholder="••••••"
+                    placeholder="• • • • • •"
                     placeholderTextColor={c.mutedForeground}
                     value={enteredCode}
                     onChangeText={(v) => { setEnteredCode(v.replace(/[^0-9]/g, "").slice(0, 6)); setError(""); }}
                     keyboardType="number-pad"
                     maxLength={6}
                     autoFocus
+                    secureTextEntry
                   />
                   {enteredCode.length === 6 && <Feather name="check-circle" size={16} color={GREEN} />}
                 </View>
+                <Text style={[styles.hintText, { color: c.mutedForeground }]}>OTP is valid for 10 minutes</Text>
               </View>
 
               <TouchableOpacity
-                style={[styles.actionBtn, enteredCode.length < 6 && { opacity: 0.55 }]}
-                onPress={handleVerifyCode}
-                disabled={enteredCode.length < 6}
+                style={[styles.actionBtn, (loading || enteredCode.length < 6) && { opacity: 0.6 }]}
+                onPress={handleVerifyOtp}
+                disabled={loading || enteredCode.length < 6}
                 activeOpacity={0.85}
               >
-                <Feather name="shield" size={17} color="#fff" />
-                <Text style={styles.actionBtnText}>Verify Code</Text>
+                {loading ? <ActivityIndicator color="#fff" /> : (<><Feather name="shield" size={17} color="#fff" /><Text style={styles.actionBtnText}>Verify OTP</Text></>)}
               </TouchableOpacity>
             </>
           )}
@@ -236,10 +257,15 @@ export default function ForgotPasswordScreen() {
                     value={newPassword}
                     onChangeText={(v) => { setNewPassword(v); setError(""); }}
                     secureTextEntry={!showPass}
+                    autoCorrect={false}
                     autoFocus
                   />
-                  <TouchableOpacity onPress={() => setShowPass(!showPass)}>
-                    <Feather name={showPass ? "eye-off" : "eye"} size={16} color={c.mutedForeground} />
+                  <TouchableOpacity
+                    onPress={() => setShowPass((p) => !p)}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    activeOpacity={0.6}
+                  >
+                    <Feather name={showPass ? "eye-off" : "eye"} size={18} color={c.mutedForeground} />
                   </TouchableOpacity>
                 </View>
               </View>
@@ -258,9 +284,14 @@ export default function ForgotPasswordScreen() {
                     value={confirmPassword}
                     onChangeText={(v) => { setConfirmPassword(v); setError(""); }}
                     secureTextEntry={!showConfirm}
+                    autoCorrect={false}
                   />
-                  <TouchableOpacity onPress={() => setShowConfirm(!showConfirm)}>
-                    <Feather name={showConfirm ? "eye-off" : "eye"} size={16} color={c.mutedForeground} />
+                  <TouchableOpacity
+                    onPress={() => setShowConfirm((p) => !p)}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    activeOpacity={0.6}
+                  >
+                    <Feather name={showConfirm ? "eye-off" : "eye"} size={18} color={c.mutedForeground} />
                   </TouchableOpacity>
                 </View>
                 {confirmPassword.length > 0 && (
@@ -283,11 +314,9 @@ export default function ForgotPasswordScreen() {
                 <View style={[styles.successIcon, { backgroundColor: GREEN + "18" }]}>
                   <Feather name="check-circle" size={48} color={GREEN} />
                 </View>
-                <Text style={[styles.successTitle, { color: c.foreground }]}>Request Submitted!</Text>
+                <Text style={[styles.successTitle, { color: c.foreground }]}>Reset Initiated!</Text>
                 <Text style={[styles.successDesc, { color: c.mutedForeground }]}>
-                  A secure reset link has been sent to{"\n"}
-                  <Text style={{ color: c.foreground, fontFamily: "Inter_600SemiBold" }}>{email}</Text>
-                  {"\n\n"}Open the link in your email to activate your new password.
+                  Your identity was verified successfully. A secure reset link has been sent to your registered email to activate the new password.
                 </Text>
                 <View style={[styles.noteBox, { backgroundColor: GREEN + "12", borderColor: GREEN + "30" }]}>
                   <Feather name="info" size={13} color={GREEN} />
@@ -329,17 +358,16 @@ const styles = StyleSheet.create({
   formCard: { flex: 1, borderTopLeftRadius: 32, borderTopRightRadius: 32, padding: 28, paddingTop: 32, gap: 16 },
   errorBox: { flexDirection: "row", alignItems: "flex-start", gap: 8, padding: 12, borderRadius: 10, borderWidth: 1 },
   errorText: { fontSize: 13, fontFamily: "Inter_500Medium", flex: 1, lineHeight: 18 },
+  infoBanner: { flexDirection: "row", alignItems: "flex-start", gap: 10, padding: 14, borderRadius: 12, borderWidth: 1 },
+  infoText: { flex: 1, fontSize: 13, fontFamily: "Inter_400Regular", lineHeight: 20 },
   fieldGroup: { gap: 7 },
   fieldLabel: { fontSize: 13, fontFamily: "Inter_500Medium" },
   inputWrapper: { flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1.5, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 13 },
+  phonePrefix: { paddingRight: 8, borderRightWidth: 1, marginRight: 2 },
+  prefixText: { fontSize: 14, fontFamily: "Inter_500Medium" },
   input: { flex: 1, fontSize: 15, fontFamily: "Inter_400Regular" },
+  hintText: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
   matchHint: { fontSize: 12, fontFamily: "Inter_500Medium", marginTop: 2 },
-  codeDisplay: { flexDirection: "row", alignItems: "center", gap: 12, padding: 14, borderRadius: 14, borderWidth: 1 },
-  codeIconBox: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
-  codeLabel: { fontSize: 11, fontFamily: "Inter_500Medium", marginBottom: 2 },
-  codeValue: { fontSize: 28, fontFamily: "Inter_700Bold", letterSpacing: 6 },
-  codeBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
-  codeBadgeText: { color: "#fff", fontSize: 9, fontFamily: "Inter_700Bold" },
   verifiedBadge: { flexDirection: "row", alignItems: "center", gap: 8, padding: 12, borderRadius: 12, borderWidth: 1 },
   verifiedText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
   actionBtn: {

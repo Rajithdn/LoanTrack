@@ -1,33 +1,47 @@
 import { Platform } from "react-native";
 import { RecaptchaVerifier, signInWithPhoneNumber, ConfirmationResult, signOut } from "firebase/auth";
-import { auth } from "./firebase";
+import { doc, setDoc, getDoc, deleteDoc } from "firebase/firestore";
+import { auth, db } from "./firebase";
 
+// ─── Module state ────────────────────────────────────────────────────────────
 let _confirmationResult: ConfirmationResult | null = null;
 let _recaptchaVerifier: RecaptchaVerifier | null = null;
 let _pendingUser: { name: string; email: string; password: string; phone: string } | null = null;
 let _otpMode: "register" | "login" | "mock_register" | "mock_forgot" = "register";
 let _loginPhone: string = "";
-let _mockCode: string = "";
-let _forgotEmail: string = "";
 
-export function generateMockCode(): string {
-  const code = String(Math.floor(100000 + Math.random() * 900000));
-  _mockCode = code;
-  return code;
+// ─── Firestore OTP storage (10-min expiry) ───────────────────────────────────
+const OTP_COLLECTION = "otp_verifications";
+const OTP_EXPIRY_MS = 10 * 60 * 1000;
+
+function safeKey(key: string): string {
+  return key.replace(/[+\s@.]/g, "_").toLowerCase();
 }
 
-export function getMockCode(): string {
-  return _mockCode;
+export async function storeOTP(key: string, code: string): Promise<void> {
+  await setDoc(doc(db, OTP_COLLECTION, safeKey(key)), {
+    code,
+    expiresAt: Date.now() + OTP_EXPIRY_MS,
+    used: false,
+  });
 }
 
-export function setForgotEmail(email: string) {
-  _forgotEmail = email;
+export async function verifyStoredOTP(key: string, code: string): Promise<void> {
+  const ref = doc(db, OTP_COLLECTION, safeKey(key));
+  const snap = await getDoc(ref);
+  if (!snap.exists()) throw new Error("OTP not found or expired. Please request a new code.");
+  const data = snap.data();
+  if (data.used) throw new Error("This OTP has already been used. Please request a new one.");
+  if (Date.now() > data.expiresAt) throw new Error("OTP has expired. Please go back and request a new one.");
+  if (data.code !== code.trim()) throw new Error("Incorrect OTP. Please check and try again.");
+  await deleteDoc(ref);
 }
 
-export function getForgotEmail(): string {
-  return _forgotEmail;
+export function generateOTPCode(): string {
+  return String(Math.floor(100000 + Math.random() * 900000));
 }
 
+// ─── Pending user (registration) ─────────────────────────────────────────────
 export function setPendingUser(data: { name: string; email: string; password: string; phone: string }) {
   _pendingUser = { ...data };
 }
@@ -41,6 +55,7 @@ export function clearPendingUser() {
   _confirmationResult = null;
 }
 
+// ─── Mode / phone helpers ─────────────────────────────────────────────────────
 export function setOtpMode(mode: "register" | "login" | "mock_register" | "mock_forgot") {
   _otpMode = mode;
 }
@@ -57,6 +72,7 @@ export function getLoginPhone() {
   return _loginPhone;
 }
 
+// ─── Firebase Phone OTP (requires Firebase Phone Auth enabled) ───────────────
 export async function sendPhoneOTP(phone: string): Promise<void> {
   if (Platform.OS !== "web") {
     throw new Error("Phone OTP is only supported on the web version of the app.");
@@ -94,7 +110,7 @@ export async function sendPhoneOTP(phone: string): Promise<void> {
     const code: string = e?.code ?? "";
     if (code.includes("invalid-phone-number")) throw new Error("Invalid phone number. Use a valid 10-digit number.");
     if (code.includes("too-many-requests")) throw new Error("Too many attempts. Please wait and try again.");
-    if (code.includes("operation-not-allowed")) throw new Error("Phone authentication is not enabled. Please enable it in Firebase Console → Authentication → Sign-in method.");
+    if (code.includes("operation-not-allowed")) throw new Error("Phone authentication is not enabled. Enable it in Firebase Console → Authentication → Sign-in method.");
     if (code.includes("billing-not-enabled")) throw new Error("Firebase billing is required for Phone Auth. Please upgrade your Firebase plan.");
     if (e?.message) throw new Error(e.message);
     throw new Error("Failed to send OTP. Please try again.");
