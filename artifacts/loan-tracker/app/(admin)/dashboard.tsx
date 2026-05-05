@@ -195,9 +195,10 @@ export default function AdminDashboard() {
         {/* Quick nav row */}
         <View style={styles.quickNav}>
           {[
-            { label: "Loans",    icon: "briefcase", route: "/(admin)/loans"    },
-            { label: "Users",    icon: "users",     route: "/(admin)/users"    },
-            { label: "Payments", icon: "credit-card", route: "/(admin)/payments" },
+            { label: "Loans",      icon: "briefcase",  route: "/(admin)/loans"      },
+            { label: "Users",      icon: "users",       route: "/(admin)/users"      },
+            { label: "Payments",   icon: "credit-card", route: "/(admin)/payments"   },
+            { label: "Calculator", icon: "calculator",  route: "/(admin)/calculator" },
           ].map((item) => (
             <TouchableOpacity
               key={item.label}

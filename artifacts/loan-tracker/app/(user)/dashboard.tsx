@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
@@ -28,6 +28,7 @@ import { NotificationBanner } from "@/components/NotificationBanner";
 import { StatusBadge } from "@/components/StatusBadge";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { PaymentMode } from "@/services/paymentService";
+import { calculateLoanBreakdown } from "@/services/loanService";
 
 const PAYMENT_MODES: { mode: PaymentMode; icon: string; color: string; bg: string; label: string }[] = [
   { mode: "PhonePe",    icon: "cellphone", color: "#7B3FE4", bg: "#7B3FE422", label: "PhonePe" },
@@ -48,6 +49,18 @@ export default function UserDashboard() {
   const [payError, setPayError] = useState("");
   const [notifPanel, setNotifPanel] = useState(false);
   const [notification, setNotification] = useState<{ msg: string; type: "success" | "error" | "info" } | null>(null);
+  const [calcModal, setCalcModal] = useState(false);
+  const [calcAmount, setCalcAmount] = useState("");
+  const [calcRate, setCalcRate] = useState("");
+  const [calcDuration, setCalcDuration] = useState("");
+
+  const calcResult = useMemo(() => {
+    const p = parseFloat(calcAmount);
+    const r = parseFloat(calcRate);
+    const d = parseInt(calcDuration);
+    if (!p || !r || !d || p <= 0 || r <= 0 || d <= 0) return null;
+    return calculateLoanBreakdown(p, r, d);
+  }, [calcAmount, calcRate, calcDuration]);
 
   const { data: loans = [], isLoading, refetch } = useQuery({
     queryKey: ["userLoans", user?.id],
@@ -203,7 +216,13 @@ export default function UserDashboard() {
               <View style={styles.heroRow}>
                 <View style={styles.heroStat}>
                   <Text style={styles.heroStatLabel}>Interest</Text>
-                  <Text style={styles.heroStatValue}>{loan.interest}% → ₹{(loan.interestAmount ?? 0).toLocaleString()}</Text>
+                  <Text style={styles.heroStatValue}>
+                    {loan.interest}% → ₹{(
+                      loan.interestAmount && loan.interestAmount > 0
+                        ? loan.interestAmount
+                        : Math.round(loan.amount * loan.interest / 100 * 100) / 100
+                    ).toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                  </Text>
                 </View>
                 <View style={styles.heroStat}>
                   <Text style={styles.heroStatLabel}>EMI</Text>
@@ -304,6 +323,17 @@ export default function UserDashboard() {
               <Feather name="calendar" size={16} color={c.primary} />
               <Text style={[styles.scheduleBtnText, { color: c.primary }]}>View Full Repayment Schedule</Text>
               <Feather name="chevron-right" size={16} color={c.primary} />
+            </TouchableOpacity>
+
+            {/* EMI Calculator button */}
+            <TouchableOpacity
+              style={[styles.scheduleBtn, { borderColor: "#0D47A1" }]}
+              onPress={() => setCalcModal(true)}
+              activeOpacity={0.8}
+            >
+              <Feather name="calculator" size={16} color="#0D47A1" />
+              <Text style={[styles.scheduleBtnText, { color: "#0D47A1" }]}>EMI Calculator</Text>
+              <Feather name="chevron-right" size={16} color="#0D47A1" />
             </TouchableOpacity>
 
             {loan.status === "completed" && (
@@ -409,6 +439,75 @@ export default function UserDashboard() {
                 </>
               )}
             </TouchableOpacity>
+          </ScrollView>
+        </View>
+      </Modal>
+
+      {/* EMI Calculator Modal */}
+      <Modal visible={calcModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setCalcModal(false)}>
+        <View style={[styles.modalContent, { backgroundColor: c.background }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: c.border }]}>
+            <Text style={[styles.modalTitle, { color: c.foreground }]}>EMI Calculator</Text>
+            <TouchableOpacity onPress={() => setCalcModal(false)}>
+              <Feather name="x" size={22} color={c.mutedForeground} />
+            </TouchableOpacity>
+          </View>
+          <ScrollView contentContainerStyle={styles.modalBody} keyboardShouldPersistTaps="handled">
+            {/* Inputs */}
+            {([
+              { label: "Loan Amount (₹)", val: calcAmount, set: setCalcAmount, placeholder: "e.g. 100000", dec: true },
+              { label: "Annual Interest Rate (%)", val: calcRate, set: setCalcRate, placeholder: "e.g. 12", dec: true },
+              { label: "Duration (months)", val: calcDuration, set: setCalcDuration, placeholder: "e.g. 24", dec: false },
+            ] as const).map((f) => (
+              <View key={f.label} style={styles.fieldGroup}>
+                <Text style={[styles.fieldLabel, { color: c.mutedForeground }]}>{f.label}</Text>
+                <View style={[styles.inputWrapper, { borderColor: c.border, backgroundColor: c.muted }]}>
+                  <TextInput
+                    style={[styles.input, { color: c.foreground }]}
+                    placeholder={f.placeholder}
+                    placeholderTextColor={c.mutedForeground}
+                    value={f.val}
+                    onChangeText={f.set}
+                    keyboardType={f.dec ? "decimal-pad" : "number-pad"}
+                  />
+                </View>
+              </View>
+            ))}
+
+            {/* Results */}
+            {calcResult ? (
+              <View style={[styles.calcResultCard, { backgroundColor: "#00A86B" + "10", borderColor: "#00A86B" + "30" }]}>
+                <View style={[styles.calcEmiBox, { backgroundColor: "#00A86B" }]}>
+                  <Text style={styles.calcEmiLabel}>Monthly EMI</Text>
+                  <Text style={styles.calcEmiAmt}>₹{calcResult.emi.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text>
+                </View>
+                <View style={styles.calcGrid}>
+                  <View style={[styles.calcGridItem, { backgroundColor: c.background }]}>
+                    <Text style={[styles.calcGridLabel, { color: c.mutedForeground }]}>Principal</Text>
+                    <Text style={[styles.calcGridVal, { color: c.foreground }]}>₹{parseFloat(calcAmount).toLocaleString()}</Text>
+                  </View>
+                  <View style={[styles.calcGridItem, { backgroundColor: c.background }]}>
+                    <Text style={[styles.calcGridLabel, { color: c.mutedForeground }]}>Interest</Text>
+                    <Text style={[styles.calcGridVal, { color: "#F5A623" }]}>₹{calcResult.interestAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</Text>
+                  </View>
+                  <View style={[styles.calcGridItem, { backgroundColor: c.background }]}>
+                    <Text style={[styles.calcGridLabel, { color: c.mutedForeground }]}>Total Payable</Text>
+                    <Text style={[styles.calcGridVal, { color: "#0D47A1" }]}>₹{calcResult.totalAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</Text>
+                  </View>
+                  <View style={[styles.calcGridItem, { backgroundColor: c.background }]}>
+                    <Text style={[styles.calcGridLabel, { color: c.mutedForeground }]}>Duration</Text>
+                    <Text style={[styles.calcGridVal, { color: c.foreground }]}>{calcDuration} months</Text>
+                  </View>
+                </View>
+              </View>
+            ) : (
+              <View style={[styles.calcHint, { backgroundColor: c.muted }]}>
+                <Feather name="info" size={16} color={c.mutedForeground} />
+                <Text style={[styles.calcHintText, { color: c.mutedForeground }]}>
+                  Enter loan details above to calculate your EMI instantly.
+                </Text>
+              </View>
+            )}
           </ScrollView>
         </View>
       </Modal>
@@ -542,6 +641,17 @@ const styles = StyleSheet.create({
   // Completed
   completedBanner: { flexDirection: "row", alignItems: "center", gap: 10, padding: 16, borderRadius: 14 },
   completedText: { fontFamily: "Inter_600SemiBold", fontSize: 14 },
+  // Calc modal
+  calcResultCard: { borderRadius: 16, borderWidth: 1, padding: 14, gap: 12 },
+  calcEmiBox: { borderRadius: 12, padding: 18, alignItems: "center" },
+  calcEmiLabel: { color: "rgba(255,255,255,0.8)", fontSize: 12, fontFamily: "Inter_500Medium", marginBottom: 4 },
+  calcEmiAmt: { color: "#fff", fontSize: 26, fontFamily: "Inter_700Bold" },
+  calcGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  calcGridItem: { flex: 1, minWidth: "45%", borderRadius: 10, padding: 12 },
+  calcGridLabel: { fontSize: 11, fontFamily: "Inter_400Regular", marginBottom: 4 },
+  calcGridVal: { fontSize: 14, fontFamily: "Inter_700Bold" },
+  calcHint: { flexDirection: "row", alignItems: "flex-start", gap: 8, padding: 14, borderRadius: 12 },
+  calcHintText: { flex: 1, fontSize: 13, fontFamily: "Inter_400Regular", lineHeight: 20 },
   // Modal
   modalContent: { flex: 1 },
   modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 20, borderBottomWidth: 1 },
