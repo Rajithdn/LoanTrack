@@ -196,11 +196,23 @@ export default function UserDashboard() {
       >
 
         {!loan ? (
-          <View style={[styles.noLoanCard, { backgroundColor: c.card, borderColor: c.border }]}>
-            <Feather name="inbox" size={44} color={c.mutedForeground} />
-            <Text style={[styles.noLoanTitle, { color: c.foreground }]}>No Active Loan</Text>
-            <Text style={[styles.noLoanSub, { color: c.mutedForeground }]}>Contact your admin to set up a loan.</Text>
-          </View>
+          <>
+            <View style={[styles.noLoanCard, { backgroundColor: c.card, borderColor: c.border }]}>
+              <Feather name="inbox" size={44} color={c.mutedForeground} />
+              <Text style={[styles.noLoanTitle, { color: c.foreground }]}>No Active Loan</Text>
+              <Text style={[styles.noLoanSub, { color: c.mutedForeground }]}>Contact your admin to set up a loan.</Text>
+            </View>
+            {/* EMI Calculator always accessible */}
+            <TouchableOpacity
+              style={[styles.scheduleBtn, { borderColor: "#0D47A1" }]}
+              onPress={() => setCalcModal(true)}
+              activeOpacity={0.8}
+            >
+              <Feather name="calculator" size={16} color="#0D47A1" />
+              <Text style={[styles.scheduleBtnText, { color: "#0D47A1" }]}>EMI Calculator</Text>
+              <Feather name="chevron-right" size={16} color="#0D47A1" />
+            </TouchableOpacity>
+          </>
         ) : (
           <>
             {/* Loan Hero Card */}

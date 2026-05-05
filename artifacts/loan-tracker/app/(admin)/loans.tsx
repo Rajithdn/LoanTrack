@@ -28,6 +28,8 @@ export default function LoansScreen() {
   const qc = useQueryClient();
   const [modalVisible, setModalVisible] = useState(false);
   const [filter, setFilter] = useState<"all" | "active" | "completed">("all");
+  const [userFilter, setUserFilter] = useState<string>("all");
+  const [userFilterPickerVisible, setUserFilterPickerVisible] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const [userPickerVisible, setUserPickerVisible] = useState(false);
   const [form, setForm] = useState({ amount: "", interest: "", duration: "" });
@@ -43,7 +45,15 @@ export default function LoansScreen() {
     onError: () => setFormError("Failed to add loan. Try again."),
   });
 
-  const filtered = loans.filter((l) => filter === "all" || l.status === filter);
+  const filtered = loans.filter((l) => {
+    const statusMatch = filter === "all" || l.status === filter;
+    const userMatch = userFilter === "all" || l.userId === userFilter;
+    return statusMatch && userMatch;
+  });
+
+  const selectedUserName = userFilter === "all"
+    ? "All Users"
+    : (users.find((u) => u.id === userFilter)?.name ?? "Unknown");
 
   const breakdown = form.amount && form.interest && form.duration
     ? calculateLoanBreakdown(parseFloat(form.amount), parseFloat(form.interest), parseInt(form.duration))
@@ -82,7 +92,7 @@ export default function LoansScreen() {
       />
 
       <View style={[styles.body, { backgroundColor: c.background }]}>
-      {/* Filters */}
+      {/* Status Filters */}
       <View style={[styles.filterRow, { paddingHorizontal: 20 }]}>
         {(["all", "active", "completed"] as const).map((f) => (
           <TouchableOpacity
@@ -95,6 +105,20 @@ export default function LoansScreen() {
             </Text>
           </TouchableOpacity>
         ))}
+      </View>
+
+      {/* User Filter Dropdown */}
+      <View style={{ paddingHorizontal: 20, paddingBottom: 10 }}>
+        <TouchableOpacity
+          style={[styles.userFilterBtn, { borderColor: c.border, backgroundColor: c.muted }]}
+          onPress={() => setUserFilterPickerVisible(true)}
+        >
+          <Feather name="user" size={14} color={c.mutedForeground} />
+          <Text style={[styles.userFilterText, { color: userFilter === "all" ? c.mutedForeground : c.foreground }]} numberOfLines={1}>
+            {selectedUserName}
+          </Text>
+          <Feather name="chevron-down" size={14} color={c.mutedForeground} />
+        </TouchableOpacity>
       </View>
 
       {isLoading ? (
@@ -197,7 +221,39 @@ export default function LoansScreen() {
         </ScrollView>
       </Modal>
 
-      {/* User Picker Modal */}
+      {/* User Filter Picker Modal */}
+      <Modal visible={userFilterPickerVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setUserFilterPickerVisible(false)}>
+        <View style={[styles.modalContent, { backgroundColor: c.background }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: c.border }]}>
+            <Text style={[styles.modalTitle, { color: c.foreground }]}>Filter by Borrower</Text>
+            <TouchableOpacity onPress={() => setUserFilterPickerVisible(false)}>
+              <Feather name="x" size={22} color={c.mutedForeground} />
+            </TouchableOpacity>
+          </View>
+          <FlatList
+            data={[{ id: "all", name: "All Users", email: "" } as any, ...users]}
+            keyExtractor={(u) => u.id}
+            contentContainerStyle={{ padding: 16 }}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={[styles.userPickItem, { borderColor: c.border, backgroundColor: userFilter === item.id ? c.primary + "18" : c.card }]}
+                onPress={() => { setUserFilter(item.id); setUserFilterPickerVisible(false); }}
+              >
+                <View style={[styles.avatarSm, { backgroundColor: c.primary + "20" }]}>
+                  <Text style={[styles.avatarSmText, { color: c.primary }]}>{item.name.charAt(0)}</Text>
+                </View>
+                <View style={styles.flex}>
+                  <Text style={[styles.userName, { color: c.foreground }]}>{item.name}</Text>
+                  {item.email ? <Text style={[styles.userEmail, { color: c.mutedForeground }]}>{item.email}</Text> : null}
+                </View>
+                {userFilter === item.id && <Feather name="check" size={18} color={c.primary} />}
+              </TouchableOpacity>
+            )}
+          />
+        </View>
+      </Modal>
+
+      {/* User Picker Modal (for Add Loan) */}
       <Modal visible={userPickerVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setUserPickerVisible(false)}>
         <View style={[styles.modalContent, { backgroundColor: c.background }]}>
           <View style={[styles.modalHeader, { borderBottomColor: c.border }]}>
@@ -239,6 +295,8 @@ const styles = StyleSheet.create({
   filterRow: { flexDirection: "row", gap: 8, paddingVertical: 12 },
   filterBtn: { paddingHorizontal: 16, paddingVertical: 7, borderRadius: 100 },
   filterText: { fontFamily: "Inter_500Medium", fontSize: 13 },
+  userFilterBtn: { flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9 },
+  userFilterText: { flex: 1, fontSize: 13, fontFamily: "Inter_500Medium" },
   empty: { alignItems: "center", paddingTop: 60, gap: 12 },
   emptyText: { fontFamily: "Inter_400Regular", fontSize: 15 },
   modalContent: { flex: 1 },

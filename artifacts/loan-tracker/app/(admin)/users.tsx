@@ -224,6 +224,26 @@ export default function UsersScreen() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["users"] }),
   });
 
+  const checkAndDelete = async (u: UserProfile) => {
+    try {
+      const loans = await getLoansByUser(u.id);
+      if (loans.length > 0) {
+        Alert.alert(
+          "Cannot Delete Borrower",
+          "Cannot delete user with existing loan records.",
+          [{ text: "OK" }]
+        );
+        return;
+      }
+      Alert.alert("Delete Borrower", `Remove ${u.name}?`, [
+        { text: "Cancel", style: "cancel" },
+        { text: "Delete", style: "destructive", onPress: () => deleteMutation.mutate(u.id) },
+      ]);
+    } catch {
+      Alert.alert("Error", "Could not verify loan records. Please try again.");
+    }
+  };
+
   const filtered = users.filter(
     (u) =>
       u.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -261,10 +281,7 @@ export default function UsersScreen() {
   };
 
   const handleDelete = (u: UserProfile) => {
-    Alert.alert("Delete Borrower", `Remove ${u.name}?`, [
-      { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: () => deleteMutation.mutate(u.id) },
-    ]);
+    checkAndDelete(u);
   };
 
   const bottomPad = Platform.OS === "web" ? 34 : insets.bottom;

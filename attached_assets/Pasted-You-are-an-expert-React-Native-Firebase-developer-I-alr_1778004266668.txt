@@ -1,0 +1,135 @@
+You are an expert React Native + Firebase developer.
+
+I already have a working loan tracking app. Do NOT change UI design, layout, colors, CSS, or structure. Keep dashboard, components, and styling exactly the same.
+
+Make ONLY the following functional fixes and feature additions, and implement them in the correct pages/screens:
+
+---
+
+1. ADMIN DASHBOARD PAGE
+
+- Fix the “Export Full Report (CSV)” button:
+  
+  - Currently shows error: "could not export CSV"
+  - Fix CSV generation logic properly
+  - Ensure all data (users, loans, payments) is exported correctly
+  - Fix UI issue: button is overlapping with bottom elements (adjust spacing, no redesign)
+
+- 🚨 IMPORTANT BUSINESS RULE (MUST IMPLEMENT):
+  
+  Do NOT allow deletion of a user/borrower if they have any loan record.
+  
+  Implementation details:
+  
+  - Before deleting a user:
+    - Query the "loans" collection using "userId" or "borrowerId"
+  - If ANY loan exists (active or past):
+    - Block deletion
+    - Show error message:
+      👉 "Cannot delete user with existing loan records"
+  - Only allow deletion if:
+    - No loan records exist for that user
+
+---
+
+2. LOANS & PAYMENTS SECTION (ADMIN DASHBOARD)
+
+- Add a Filter Dropdown (by User Name / Borrower Name)
+  
+  Requirements:
+  
+  - Dropdown should list all user/borrower names
+  - Include "All Users" option
+  - Filter loans and payments dynamically based on selection
+  - Do not reload page
+  - Use existing Firestore data
+  - Maintain UI design
+
+---
+
+3. BORROWER DASHBOARD PAGE
+
+- Add a Loan Calculator section:
+  - Works without loan
+  - Inputs:
+    - Loan Amount
+    - Interest Rate
+    - Duration (months)
+  - Outputs:
+    - EMI
+    - Total Interest
+    - Total Payable
+
+---
+
+4. AUTHENTICATION SCREENS
+
+- Fix OTP issue:
+  
+  - Replace Firebase Web SDK
+  - Expo → expo-firebase-recaptcha
+  - RN CLI → @react-native-firebase/auth
+
+- Signup:
+  
+  - OTP verification required
+  - After success → redirect to login
+
+- Fix UI issue:
+  
+  - Login/Signup screen jumping
+  - Use KeyboardAvoidingView properly
+
+---
+
+5. FORGOT PASSWORD (OTP BASED)
+
+- Use phone OTP (NO email link)
+- Flow:
+  - Enter phone
+  - OTP verify
+  - New password + confirm
+  - Save and redirect
+
+---
+
+6. APK BUILD & DOWNLOAD (VERY IMPORTANT)
+
+- Configure Expo EAS build for Android
+
+- Ensure project builds successfully without errors
+
+- Generate APK using:
+  
+  - eas build -p android --profile preview
+
+- After build:
+  
+  - Provide the Expo build link
+  - Provide direct APK download link
+
+- Ensure APK:
+  
+  - Installs on Android device
+  - Works with Firebase properly
+
+---
+
+7. GENERAL RULES
+
+- Do NOT change UI
+- Do NOT break existing logic
+- Keep code production-ready
+
+---
+
+8. OUTPUT REQUIRED
+
+- Updated code files
+- List of changes
+- APK download link
+- Build instructions
+
+---
+
+Focus on correctness and working APK output.

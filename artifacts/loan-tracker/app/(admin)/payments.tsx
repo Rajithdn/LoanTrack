@@ -40,6 +40,8 @@ export default function PaymentsScreen() {
   const qc = useQueryClient();
 
   const [filter, setFilter] = useState<"pending" | "confirmed" | "all">("pending");
+  const [userFilter, setUserFilter] = useState<string>("all");
+  const [userFilterPickerVisible, setUserFilterPickerVisible] = useState(false);
   const [notification, setNotification] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 
   // Confirm modal state
@@ -88,9 +90,17 @@ export default function PaymentsScreen() {
     setConfirmModal(true);
   };
 
-  const filtered = filter === "all" ? payments : payments.filter((p) => p.status === filter);
+  const filtered = payments.filter((p) => {
+    const statusMatch = filter === "all" || p.status === filter;
+    const userMatch = userFilter === "all" || p.userId === userFilter;
+    return statusMatch && userMatch;
+  });
   const pendingCount = payments.filter((p) => p.status === "pending").length;
   const confirmedCount = payments.filter((p) => p.status === "confirmed").length;
+
+  const selectedUserFilterName = userFilter === "all"
+    ? "All Users"
+    : (users.find((u) => u.id === userFilter)?.name ?? "Unknown");
 
   const bottomPad = Platform.OS === "web" ? 34 : insets.bottom;
 
@@ -142,6 +152,20 @@ export default function PaymentsScreen() {
         ))}
       </View>
 
+      {/* User Filter Dropdown */}
+      <View style={{ paddingHorizontal: 20, paddingBottom: 10 }}>
+        <TouchableOpacity
+          style={[styles.userFilterBtn, { borderColor: c.border, backgroundColor: c.muted }]}
+          onPress={() => setUserFilterPickerVisible(true)}
+        >
+          <Feather name="user" size={14} color={c.mutedForeground} />
+          <Text style={[styles.userFilterText, { color: userFilter === "all" ? c.mutedForeground : c.foreground }]} numberOfLines={1}>
+            {selectedUserFilterName}
+          </Text>
+          <Feather name="chevron-down" size={14} color={c.mutedForeground} />
+        </TouchableOpacity>
+      </View>
+
       {isLoading ? (
         <ActivityIndicator style={{ marginTop: 40 }} color={c.primary} />
       ) : (
@@ -182,6 +206,41 @@ export default function PaymentsScreen() {
       )}
 
       </View>{/* end body */}
+
+      {/* User Filter Picker Modal */}
+      <Modal visible={userFilterPickerVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setUserFilterPickerVisible(false)}>
+        <View style={[styles.modalContainer, { backgroundColor: c.background }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: c.border }]}>
+            <Text style={[styles.modalTitle, { color: c.foreground }]}>Filter by Borrower</Text>
+            <TouchableOpacity onPress={() => setUserFilterPickerVisible(false)}>
+              <Feather name="x" size={22} color={c.mutedForeground} />
+            </TouchableOpacity>
+          </View>
+          <FlatList
+            data={[{ id: "all", name: "All Users", email: "" } as any, ...users]}
+            keyExtractor={(u) => u.id}
+            contentContainerStyle={{ padding: 16 }}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={[
+                  styles.userPickItem,
+                  { borderColor: c.border, backgroundColor: userFilter === item.id ? c.primary + "18" : c.card }
+                ]}
+                onPress={() => { setUserFilter(item.id); setUserFilterPickerVisible(false); }}
+              >
+                <View style={[styles.userPickAvatar, { backgroundColor: c.primary + "20" }]}>
+                  <Text style={[styles.userPickAvatarText, { color: c.primary }]}>{item.name.charAt(0)}</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.userPickName, { color: c.foreground }]}>{item.name}</Text>
+                  {item.email ? <Text style={[styles.userPickEmail, { color: c.mutedForeground }]}>{item.email}</Text> : null}
+                </View>
+                {userFilter === item.id && <Feather name="check" size={18} color={c.primary} />}
+              </TouchableOpacity>
+            )}
+          />
+        </View>
+      </Modal>
 
       {/* Confirm Modal */}
       <Modal
@@ -313,6 +372,13 @@ const styles = StyleSheet.create({
   filterRow: { flexDirection: "row", gap: 8, paddingVertical: 12 },
   filterBtn: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 100 },
   filterText: { fontFamily: "Inter_500Medium", fontSize: 12 },
+  userFilterBtn: { flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9 },
+  userFilterText: { flex: 1, fontSize: 13, fontFamily: "Inter_500Medium" },
+  userPickItem: { flexDirection: "row", alignItems: "center", gap: 12, padding: 14, borderRadius: 12, borderWidth: 1, marginBottom: 8 },
+  userPickAvatar: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
+  userPickAvatarText: { fontSize: 14, fontFamily: "Inter_700Bold" },
+  userPickName: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
+  userPickEmail: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
   empty: { alignItems: "center", paddingTop: 60, gap: 12 },
   emptyText: { fontFamily: "Inter_400Regular", fontSize: 15 },
   // Modal
