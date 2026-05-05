@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Dimensions,
   KeyboardAvoidingView,
   Platform,
@@ -17,15 +16,13 @@ import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
-import { register, signOut } from "@/services/authService";
-import { useAuth } from "@/context/AuthContext";
+import { setPendingUser, setOtpMode, generateMockCode } from "@/services/otpService";
 
 const { height: SCREEN_H } = Dimensions.get("window");
 const GREEN = "#00A86B";
 
 export default function RegisterScreen() {
   const c = useColors();
-  const { setUser } = useAuth();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -42,23 +39,19 @@ export default function RegisterScreen() {
     return null;
   };
 
-  const handleRegister = async () => {
+  const handleSendOtp = async () => {
     const err = validate();
     if (err) { setError(err); return; }
     setError("");
     setLoading(true);
     try {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      await register(name.trim(), email.trim(), password, phone.trim() || undefined);
-      await signOut();
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert(
-        "Account Created!",
-        "Your account has been created successfully. Please sign in to continue.",
-        [{ text: "Sign In", onPress: () => router.replace("/login") }]
-      );
+      setPendingUser({ name: name.trim(), email: email.trim(), password, phone: phone.trim() });
+      generateMockCode();
+      setOtpMode("mock_register");
+      router.push("/otp");
     } catch (e: any) {
-      setError(e?.message ?? "Registration failed. Please try again.");
+      setError(e?.message ?? "Something went wrong. Please try again.");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setLoading(false);
@@ -111,7 +104,7 @@ export default function RegisterScreen() {
                 placeholder="Enter your full name"
                 placeholderTextColor={c.mutedForeground}
                 value={name}
-                onChangeText={setName}
+                onChangeText={(v) => { setName(v); setError(""); }}
                 autoCapitalize="words"
               />
             </View>
@@ -127,7 +120,7 @@ export default function RegisterScreen() {
                 placeholder="Enter your email"
                 placeholderTextColor={c.mutedForeground}
                 value={email}
-                onChangeText={setEmail}
+                onChangeText={(v) => { setEmail(v); setError(""); }}
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -148,13 +141,11 @@ export default function RegisterScreen() {
                 placeholder="10-digit number"
                 placeholderTextColor={c.mutedForeground}
                 value={phone}
-                onChangeText={(v) => setPhone(v.replace(/[^0-9]/g, "").slice(0, 10))}
+                onChangeText={(v) => { setPhone(v.replace(/[^0-9]/g, "").slice(0, 10)); setError(""); }}
                 keyboardType="phone-pad"
                 maxLength={10}
               />
-              {phone.length === 10 && (
-                <Feather name="check-circle" size={16} color={GREEN} />
-              )}
+              {phone.length === 10 && <Feather name="check-circle" size={16} color={GREEN} />}
             </View>
           </View>
 
@@ -168,7 +159,7 @@ export default function RegisterScreen() {
                 placeholder="Min 6 characters"
                 placeholderTextColor={c.mutedForeground}
                 value={password}
-                onChangeText={setPassword}
+                onChangeText={(v) => { setPassword(v); setError(""); }}
                 secureTextEntry={!showPass}
               />
               <TouchableOpacity onPress={() => setShowPass(!showPass)}>
@@ -179,7 +170,7 @@ export default function RegisterScreen() {
 
           <TouchableOpacity
             style={[styles.registerBtn, loading && { opacity: 0.75 }]}
-            onPress={handleRegister}
+            onPress={handleSendOtp}
             disabled={loading}
             activeOpacity={0.85}
           >
@@ -187,8 +178,8 @@ export default function RegisterScreen() {
               <ActivityIndicator color="#fff" />
             ) : (
               <>
-                <Feather name="user-plus" size={17} color="#fff" />
-                <Text style={styles.registerBtnText}>Create Account</Text>
+                <Feather name="shield" size={17} color="#fff" />
+                <Text style={styles.registerBtnText}>Send OTP & Verify</Text>
               </>
             )}
           </TouchableOpacity>
@@ -209,54 +200,33 @@ const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: GREEN },
   scroll: { flexGrow: 1 },
   header: {
-    backgroundColor: GREEN,
-    paddingBottom: 60,
-    minHeight: SCREEN_H * 0.34,
-    justifyContent: "flex-end",
-    overflow: "hidden",
+    backgroundColor: GREEN, paddingBottom: 60,
+    minHeight: SCREEN_H * 0.34, justifyContent: "flex-end", overflow: "hidden",
   },
-  circle1: {
-    position: "absolute", width: 200, height: 200, borderRadius: 100,
-    backgroundColor: "rgba(255,255,255,0.08)", top: -50, right: -50,
-  },
-  circle2: {
-    position: "absolute", width: 130, height: 130, borderRadius: 65,
-    backgroundColor: "rgba(255,255,255,0.06)", top: 30, left: -40,
-  },
+  circle1: { position: "absolute", width: 200, height: 200, borderRadius: 100, backgroundColor: "rgba(255,255,255,0.08)", top: -50, right: -50 },
+  circle2: { position: "absolute", width: 130, height: 130, borderRadius: 65, backgroundColor: "rgba(255,255,255,0.06)", top: 30, left: -40 },
   headerContent: { alignItems: "center", paddingHorizontal: 24, paddingBottom: 16 },
   backBtn: { alignSelf: "flex-start", marginBottom: 16, padding: 4 },
   logoCircle: {
     width: 70, height: 70, borderRadius: 35, backgroundColor: "#fff",
     alignItems: "center", justifyContent: "center", marginBottom: 14,
-    shadowColor: "#000", shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.2, shadowRadius: 16, elevation: 10,
+    shadowColor: "#000", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.2, shadowRadius: 16, elevation: 10,
   },
   heading: { fontSize: 26, fontFamily: "Inter_700Bold", color: "#fff", marginBottom: 4 },
   subheading: { fontSize: 14, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.8)" },
-  formCard: {
-    flex: 1, borderTopLeftRadius: 32, borderTopRightRadius: 32,
-    padding: 28, paddingTop: 32, gap: 16,
-  },
-  errorBox: {
-    flexDirection: "row", alignItems: "flex-start", gap: 8,
-    padding: 12, borderRadius: 10, borderWidth: 1,
-  },
+  formCard: { flex: 1, borderTopLeftRadius: 32, borderTopRightRadius: 32, padding: 28, paddingTop: 32, gap: 16 },
+  errorBox: { flexDirection: "row", alignItems: "flex-start", gap: 8, padding: 12, borderRadius: 10, borderWidth: 1 },
   errorText: { fontSize: 13, fontFamily: "Inter_500Medium", flex: 1, lineHeight: 18 },
   fieldGroup: { gap: 7 },
   fieldLabel: { fontSize: 13, fontFamily: "Inter_500Medium" },
-  inputWrapper: {
-    flexDirection: "row", alignItems: "center", gap: 10,
-    borderWidth: 1.5, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 13,
-  },
+  inputWrapper: { flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1.5, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 13 },
   phonePrefix: { paddingRight: 8, borderRightWidth: 1, marginRight: 2 },
   prefixText: { fontSize: 14, fontFamily: "Inter_500Medium" },
   input: { flex: 1, fontSize: 15, fontFamily: "Inter_400Regular" },
   registerBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center",
-    gap: 8, borderRadius: 14, paddingVertical: 16,
-    backgroundColor: GREEN, marginTop: 4,
-    shadowColor: GREEN, shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35, shadowRadius: 12, elevation: 6,
+    gap: 8, borderRadius: 14, paddingVertical: 16, backgroundColor: GREEN, marginTop: 4,
+    shadowColor: GREEN, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.35, shadowRadius: 12, elevation: 6,
   },
   registerBtnText: { color: "#fff", fontSize: 16, fontFamily: "Inter_700Bold", letterSpacing: 0.3 },
   loginRow: { flexDirection: "row", justifyContent: "center", paddingBottom: 8 },

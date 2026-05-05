@@ -1,7 +1,6 @@
 import React, { useCallback, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Platform,
   RefreshControl,
   ScrollView,
@@ -12,6 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { NotificationBanner } from "@/components/NotificationBanner";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
@@ -36,6 +36,7 @@ export default function AdminDashboard() {
   const { user, setUser } = useAuth();
   const insets = useSafeAreaInsets();
   const [exporting, setExporting] = useState(false);
+  const [notification, setNotification] = useState<{ message: string; type: "success" | "error" | "warning" | "info" } | null>(null);
 
   const { data: users = [], refetch: refetchUsers } = useQuery({ queryKey: ["users"], queryFn: getAllUsers });
   const { data: loans = [], refetch: refetchLoans } = useQuery({ queryKey: ["loans"], queryFn: getAllLoans });
@@ -76,8 +77,9 @@ export default function AdminDashboard() {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
       await exportLoansCSV(loans, users, payments);
-    } catch {
-      Alert.alert("Export Failed", "Could not export CSV.");
+      setNotification({ message: "Report exported successfully!", type: "success" });
+    } catch (e: any) {
+      setNotification({ message: e?.message ?? "Could not export. Please try again.", type: "error" });
     }
     setExporting(false);
   };
@@ -98,6 +100,14 @@ export default function AdminDashboard() {
 
   return (
     <View style={[styles.root, { backgroundColor: GREEN }]}>
+      {notification && (
+        <NotificationBanner
+          message={notification.message}
+          type={notification.type}
+          onDismiss={() => setNotification(null)}
+          duration={3500}
+        />
+      )}
       {/* Green gradient header */}
       <View style={styles.headerBg}>
         <View style={styles.circle1} />
@@ -152,7 +162,7 @@ export default function AdminDashboard() {
       {/* White body */}
       <ScrollView
         style={[styles.body, { backgroundColor: c.background }]}
-        contentContainerStyle={[styles.container, { paddingBottom: bottomPad + 24 }]}
+        contentContainerStyle={[styles.container, { paddingBottom: bottomPad + 80 }]}
         refreshControl={<RefreshControl refreshing={false} onRefresh={onRefresh} tintColor={GREEN} />}
         showsVerticalScrollIndicator={false}
       >
@@ -238,7 +248,7 @@ export default function AdminDashboard() {
 
         {/* Export */}
         <TouchableOpacity
-          style={[styles.exportBtn, exporting && { opacity: 0.7 }, { marginTop: 24, marginBottom: 8 }]}
+          style={[styles.exportBtn, exporting && { opacity: 0.7 }, { marginTop: 28, marginBottom: 20 }]}
           onPress={handleExport}
           disabled={exporting}
           activeOpacity={0.85}

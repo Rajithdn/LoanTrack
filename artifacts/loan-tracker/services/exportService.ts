@@ -98,7 +98,7 @@ export async function exportLoansCSV(loans: Loan[], users: UserProfile[], paymen
       p.paymentMode ?? "",
       p.status,
       p.date ? new Date(p.date).toLocaleDateString("en-IN") : "",
-      (p as any).txNote ?? "",
+      p.note ?? "",
     ]);
   }
 
@@ -119,7 +119,11 @@ export async function exportLoansCSV(loans: Loan[], users: UserProfile[], paymen
   }
 
   const fileName = `LoanTracker_Report_${new Date().toISOString().slice(0, 10)}.csv`;
-  const path = (FileSystem.documentDirectory ?? "") + fileName;
+  const dir = FileSystem.documentDirectory ?? FileSystem.cacheDirectory ?? "";
+  if (!dir) throw new Error("File storage is not available on this device.");
+  const path = dir + fileName;
   await FileSystem.writeAsStringAsync(path, csv, { encoding: FileSystem.EncodingType.UTF8 });
+  const isAvailable = await Sharing.isAvailableAsync();
+  if (!isAvailable) throw new Error("Sharing is not supported on this device.");
   await Sharing.shareAsync(path, { mimeType: "text/csv", dialogTitle: "Export Full Report" });
 }

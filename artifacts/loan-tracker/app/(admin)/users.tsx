@@ -12,6 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { NotificationBanner } from "@/components/NotificationBanner";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
@@ -204,6 +205,7 @@ export default function UsersScreen() {
   const [editUser, setEditUser] = useState<UserProfile | null>(null);
   const [form, setForm] = useState({ name: "", email: "", phone: "", password: "" });
   const [formError, setFormError] = useState("");
+  const [notification, setNotification] = useState<{ message: string; type: "success" | "error" | "warning" | "info" } | null>(null);
 
   const { data: users = [], isLoading } = useQuery({ queryKey: ["users"], queryFn: getAllUsers });
 
@@ -221,7 +223,11 @@ export default function UsersScreen() {
 
   const deleteMutation = useMutation({
     mutationFn: deleteUser,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["users"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["users"] });
+      setNotification({ message: "Borrower removed successfully.", type: "success" });
+    },
+    onError: () => setNotification({ message: "Failed to delete borrower. Please try again.", type: "error" }),
   });
 
   const checkAndDelete = async (u: UserProfile) => {
@@ -229,11 +235,10 @@ export default function UsersScreen() {
       const loans = await getLoansByUser(u.id);
       const activeLoans = loans.filter((l) => l.status === "active");
       if (activeLoans.length > 0) {
-        Alert.alert(
-          "Cannot Delete Borrower",
-          `${u.name} has ${activeLoans.length} active loan${activeLoans.length > 1 ? "s" : ""}. Please close all active loans before deleting this borrower.`,
-          [{ text: "OK" }]
-        );
+        setNotification({
+          message: `${u.name} has ${activeLoans.length} active loan${activeLoans.length > 1 ? "s" : ""}. Close all active loans before deleting.`,
+          type: "warning",
+        });
         return;
       }
       Alert.alert(
@@ -247,7 +252,7 @@ export default function UsersScreen() {
         ]
       );
     } catch {
-      Alert.alert("Error", "Could not verify loan records. Please try again.");
+      setNotification({ message: "Could not verify loan records. Please try again.", type: "error" });
     }
   };
 
@@ -295,6 +300,14 @@ export default function UsersScreen() {
 
   return (
     <View style={[styles.flex, { backgroundColor: GREEN }]}>
+      {notification && (
+        <NotificationBanner
+          message={notification.message}
+          type={notification.type}
+          onDismiss={() => setNotification(null)}
+          duration={3500}
+        />
+      )}
       <ScreenHeader
         title="Borrowers"
         subtitle={`${users.length} total`}

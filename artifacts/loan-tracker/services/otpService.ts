@@ -5,8 +5,28 @@ import { auth } from "./firebase";
 let _confirmationResult: ConfirmationResult | null = null;
 let _recaptchaVerifier: RecaptchaVerifier | null = null;
 let _pendingUser: { name: string; email: string; password: string; phone: string } | null = null;
-let _otpMode: "register" | "login" = "register";
+let _otpMode: "register" | "login" | "mock_register" | "mock_forgot" = "register";
 let _loginPhone: string = "";
+let _mockCode: string = "";
+let _forgotEmail: string = "";
+
+export function generateMockCode(): string {
+  const code = String(Math.floor(100000 + Math.random() * 900000));
+  _mockCode = code;
+  return code;
+}
+
+export function getMockCode(): string {
+  return _mockCode;
+}
+
+export function setForgotEmail(email: string) {
+  _forgotEmail = email;
+}
+
+export function getForgotEmail(): string {
+  return _forgotEmail;
+}
 
 export function setPendingUser(data: { name: string; email: string; password: string; phone: string }) {
   _pendingUser = { ...data };
@@ -21,7 +41,7 @@ export function clearPendingUser() {
   _confirmationResult = null;
 }
 
-export function setOtpMode(mode: "register" | "login") {
+export function setOtpMode(mode: "register" | "login" | "mock_register" | "mock_forgot") {
   _otpMode = mode;
 }
 
