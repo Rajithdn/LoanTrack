@@ -238,7 +238,7 @@ export default function AdminDashboard() {
 
         {/* Export */}
         <TouchableOpacity
-          style={[styles.exportBtn, exporting && { opacity: 0.7 }, { marginTop: 8, marginBottom: 16 }]}
+          style={[styles.exportBtn, exporting && { opacity: 0.7 }, { marginTop: 24, marginBottom: 8 }]}
           onPress={handleExport}
           disabled={exporting}
           activeOpacity={0.85}

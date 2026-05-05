@@ -198,6 +198,15 @@ export default function LoginScreen() {
                   <Text style={styles.loginBtnText}>Sign In</Text>
                 )}
               </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => router.push("/forgot-password")}
+                style={styles.forgotBtn}
+                activeOpacity={0.7}
+              >
+                <Feather name="help-circle" size={14} color={GREEN} />
+                <Text style={[styles.forgotText, { color: GREEN }]}>Forgot Password?</Text>
+              </TouchableOpacity>
             </>
           )}
 
@@ -207,7 +216,14 @@ export default function LoginScreen() {
               {otpError ? (
                 <View style={[styles.errorBox, { backgroundColor: "#FEE2E218", borderColor: "#EF444440" }]}>
                   <Feather name="alert-circle" size={14} color="#EF4444" />
-                  <Text style={[styles.errorText, { color: "#EF4444" }]}>{otpError}</Text>
+                  <View style={{ flex: 1, gap: 4 }}>
+                    <Text style={[styles.errorText, { color: "#EF4444" }]}>{otpError}</Text>
+                    {otpError.includes("not enabled") && (
+                      <Text style={[styles.errorText, { color: "#EF4444", fontSize: 11, opacity: 0.85 }]}>
+                        To fix: Go to Firebase Console → Authentication → Sign-in method → Enable "Phone"
+                      </Text>
+                    )}
+                  </View>
                 </View>
               ) : null}
 
@@ -361,6 +377,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.35, shadowRadius: 12, elevation: 6, marginTop: 4,
   },
   loginBtnText: { color: "#fff", fontSize: 16, fontFamily: "Inter_700Bold", letterSpacing: 0.3 },
+  forgotBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 4 },
+  forgotText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
   divider: { flexDirection: "row", alignItems: "center", gap: 12 },
   dividerLine: { flex: 1, height: 1 },
   dividerText: { fontSize: 13, fontFamily: "Inter_400Regular" },

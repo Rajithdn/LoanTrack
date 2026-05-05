@@ -2,6 +2,7 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signOut as firebaseSignOut,
+  sendPasswordResetEmail,
 } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { auth, db } from "./firebase";
@@ -94,6 +95,14 @@ export async function register(
     };
     await setDoc(doc(db, "users", cred.user.uid), profile);
     return profile;
+  } catch (e: any) {
+    throw new Error(parseFirebaseError(e));
+  }
+}
+
+export async function resetPassword(email: string): Promise<void> {
+  try {
+    await sendPasswordResetEmail(auth, email.trim());
   } catch (e: any) {
     throw new Error(parseFirebaseError(e));
   }

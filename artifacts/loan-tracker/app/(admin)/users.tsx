@@ -227,18 +227,25 @@ export default function UsersScreen() {
   const checkAndDelete = async (u: UserProfile) => {
     try {
       const loans = await getLoansByUser(u.id);
-      if (loans.length > 0) {
+      const activeLoans = loans.filter((l) => l.status === "active");
+      if (activeLoans.length > 0) {
         Alert.alert(
           "Cannot Delete Borrower",
-          "Cannot delete user with existing loan records.",
+          `${u.name} has ${activeLoans.length} active loan${activeLoans.length > 1 ? "s" : ""}. Please close all active loans before deleting this borrower.`,
           [{ text: "OK" }]
         );
         return;
       }
-      Alert.alert("Delete Borrower", `Remove ${u.name}?`, [
-        { text: "Cancel", style: "cancel" },
-        { text: "Delete", style: "destructive", onPress: () => deleteMutation.mutate(u.id) },
-      ]);
+      Alert.alert(
+        "Delete Borrower",
+        loans.length > 0
+          ? `${u.name} has completed loans on record. Are you sure you want to remove this borrower?`
+          : `Remove ${u.name}?`,
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Delete", style: "destructive", onPress: () => deleteMutation.mutate(u.id) },
+        ]
+      );
     } catch {
       Alert.alert("Error", "Could not verify loan records. Please try again.");
     }

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Dimensions,
   KeyboardAvoidingView,
   Platform,
@@ -16,7 +17,7 @@ import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
-import { register } from "@/services/authService";
+import { register, signOut } from "@/services/authService";
 import { useAuth } from "@/context/AuthContext";
 
 const { height: SCREEN_H } = Dimensions.get("window");
@@ -48,9 +49,14 @@ export default function RegisterScreen() {
     setLoading(true);
     try {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      const profile = await register(name.trim(), email.trim(), password, phone.trim() || undefined);
-      setUser(profile);
-      router.replace("/(user)/dashboard");
+      await register(name.trim(), email.trim(), password, phone.trim() || undefined);
+      await signOut();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert(
+        "Account Created!",
+        "Your account has been created successfully. Please sign in to continue.",
+        [{ text: "Sign In", onPress: () => router.replace("/login") }]
+      );
     } catch (e: any) {
       setError(e?.message ?? "Registration failed. Please try again.");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
