@@ -3,8 +3,11 @@ import {
   createUserWithEmailAndPassword,
   signOut as firebaseSignOut,
   sendPasswordResetEmail,
+  GoogleAuthProvider,
+  signInWithPopup,
 } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
+import { Platform } from "react-native";
 import { auth, db } from "./firebase";
 
 export interface UserProfile {
@@ -18,10 +21,12 @@ export interface UserProfile {
 const ADMIN_EMAIL = "admin@gmail.com";
 const ADMIN_PASSWORD = "Admin@07";
 
+const googleProvider = new GoogleAuthProvider();
+
 export function parseFirebaseError(e: any): string {
   const code: string = e?.code ?? "";
   if (code.includes("operation-not-allowed"))
-    return "Email/Password sign-in is not enabled. Please enable it in Firebase Console → Authentication → Sign-in method.";
+    return "This sign-in method is not enabled. Please enable it in Firebase Console → Authentication → Sign-in method.";
   if (code.includes("user-not-found") || code.includes("invalid-credential") || code.includes("wrong-password"))
     return "Invalid email or password.";
   if (code.includes("email-already-in-use"))
@@ -30,6 +35,10 @@ export function parseFirebaseError(e: any): string {
     return "Network error. Check your internet connection.";
   if (code.includes("too-many-requests"))
     return "Too many failed attempts. Please try again later.";
+  if (code.includes("popup-closed-by-user") || code.includes("cancelled-popup-request"))
+    return "Sign-in was cancelled. Please try again.";
+  if (code.includes("popup-blocked"))
+    return "Pop-up was blocked by your browser. Please allow pop-ups for this site.";
   if (code === "permission-denied" || e?.message?.includes("permission-denied"))
     return "Database access denied. Please update your Firestore security rules to allow authenticated access.";
   if (e?.message) return e.message;
@@ -72,6 +81,31 @@ async function signInOrCreateAdmin(): Promise<UserProfile> {
     await setDoc(doc(db, "users", uid), profile);
   }
   return profile;
+}
+
+export async function signInWithGoogle(): Promise<UserProfile> {
+  if (Platform.OS !== "web") {
+    throw new Error("Google Sign-In is available on the web version of this app.");
+  }
+  try {
+    const result = await signInWithPopup(auth, googleProvider);
+    const firebaseUser = result.user;
+    let profile = await getUserProfile(firebaseUser.uid);
+    if (!profile) {
+      // First-time Google user — create Firestore record
+      profile = {
+        id: firebaseUser.uid,
+        name: firebaseUser.displayName ?? firebaseUser.email?.split("@")[0] ?? "User",
+        email: firebaseUser.email ?? "",
+        phone: firebaseUser.phoneNumber ?? "",
+        role: "user",
+      };
+      await setDoc(doc(db, "users", firebaseUser.uid), profile);
+    }
+    return profile;
+  } catch (e: any) {
+    throw new Error(parseFirebaseError(e));
+  }
 }
 
 export async function signOut(): Promise<void> {

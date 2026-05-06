@@ -13,12 +13,12 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 import { Feather } from "@expo/vector-icons";
+import { AntDesign } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/context/AuthContext";
-import { signIn } from "@/services/authService";
-import { sendPhoneOTP, setOtpMode, setLoginPhone } from "@/services/otpService";
+import { signIn, signInWithGoogle } from "@/services/authService";
 
 const { height: SCREEN_H } = Dimensions.get("window");
 const GREEN = "#00A86B";
@@ -26,7 +26,7 @@ const GREEN = "#00A86B";
 export default function LoginScreen() {
   const c = useColors();
   const { setUser } = useAuth();
-  const [tab, setTab] = useState<"email" | "otp">("email");
+  const [tab, setTab] = useState<"email" | "google">("email");
 
   // Email login
   const [email, setEmail] = useState("");
@@ -35,10 +35,9 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // OTP login
-  const [phone, setPhone] = useState("");
-  const [otpLoading, setOtpLoading] = useState(false);
-  const [otpError, setOtpError] = useState("");
+  // Google login
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [googleError, setGoogleError] = useState("");
 
   const handleLogin = async () => {
     if (!email.trim() || !password) {
@@ -51,11 +50,7 @@ export default function LoginScreen() {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       const profile = await signIn(email.trim(), password);
       setUser(profile);
-      if (profile.role === "admin") {
-        router.replace("/(admin)/dashboard");
-      } else {
-        router.replace("/(user)/dashboard");
-      }
+      router.replace(profile.role === "admin" ? "/(admin)/dashboard" : "/(user)/dashboard");
     } catch (e: any) {
       setError(e?.message ?? "Login failed. Please try again.");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -64,24 +59,19 @@ export default function LoginScreen() {
     }
   };
 
-  const handleSendOTP = async () => {
-    if (!/^\d{10}$/.test(phone.trim())) {
-      setOtpError("Please enter a valid 10-digit phone number.");
-      return;
-    }
-    setOtpError("");
-    setOtpLoading(true);
+  const handleGoogleSignIn = async () => {
+    setGoogleError("");
+    setGoogleLoading(true);
     try {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      setOtpMode("login");
-      setLoginPhone(phone.trim());
-      await sendPhoneOTP(phone.trim());
-      router.push("/otp");
+      const profile = await signInWithGoogle();
+      setUser(profile);
+      router.replace(profile.role === "admin" ? "/(admin)/dashboard" : "/(user)/dashboard");
     } catch (e: any) {
-      setOtpError(e?.message ?? "Failed to send OTP. Please try again.");
+      setGoogleError(e?.message ?? "Google Sign-In failed. Please try again.");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
-      setOtpLoading(false);
+      setGoogleLoading(false);
     }
   };
 
@@ -123,7 +113,7 @@ export default function LoginScreen() {
           <View style={[styles.tabRow, { backgroundColor: c.muted, borderColor: c.border }]}>
             <TouchableOpacity
               style={[styles.tab, tab === "email" && { backgroundColor: GREEN }]}
-              onPress={() => { setTab("email"); setError(""); setOtpError(""); }}
+              onPress={() => { setTab("email"); setError(""); setGoogleError(""); }}
               activeOpacity={0.8}
             >
               <Feather name="mail" size={14} color={tab === "email" ? "#fff" : c.mutedForeground} />
@@ -132,13 +122,13 @@ export default function LoginScreen() {
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.tab, tab === "otp" && { backgroundColor: GREEN }]}
-              onPress={() => { setTab("otp"); setError(""); setOtpError(""); }}
+              style={[styles.tab, tab === "google" && { backgroundColor: GREEN }]}
+              onPress={() => { setTab("google"); setError(""); setGoogleError(""); }}
               activeOpacity={0.8}
             >
-              <Feather name="smartphone" size={14} color={tab === "otp" ? "#fff" : c.mutedForeground} />
-              <Text style={[styles.tabText, { color: tab === "otp" ? "#fff" : c.mutedForeground }]}>
-                Phone OTP
+              <AntDesign name="google" size={14} color={tab === "google" ? "#fff" : c.mutedForeground} />
+              <Text style={[styles.tabText, { color: tab === "google" ? "#fff" : c.mutedForeground }]}>
+                Google
               </Text>
             </TouchableOpacity>
           </View>
@@ -162,7 +152,7 @@ export default function LoginScreen() {
                     placeholder="Enter your email"
                     placeholderTextColor={c.mutedForeground}
                     value={email}
-                    onChangeText={setEmail}
+                    onChangeText={(v) => { setEmail(v); setError(""); }}
                     keyboardType="email-address"
                     autoCapitalize="none"
                     autoCorrect={false}
@@ -179,8 +169,9 @@ export default function LoginScreen() {
                     placeholder="Enter your password"
                     placeholderTextColor={c.mutedForeground}
                     value={password}
-                    onChangeText={setPassword}
+                    onChangeText={(v) => { setPassword(v); setError(""); }}
                     secureTextEntry={!showPass}
+                    autoCorrect={false}
                   />
                   <TouchableOpacity
                     onPress={() => setShowPass((p) => !p)}
@@ -216,64 +207,35 @@ export default function LoginScreen() {
             </>
           )}
 
-          {/* OTP tab */}
-          {tab === "otp" && (
+          {/* Google tab */}
+          {tab === "google" && (
             <>
-              {otpError ? (
+              {googleError ? (
                 <View style={[styles.errorBox, { backgroundColor: "#FEE2E218", borderColor: "#EF444440" }]}>
                   <Feather name="alert-circle" size={14} color="#EF4444" />
-                  <View style={{ flex: 1, gap: 4 }}>
-                    <Text style={[styles.errorText, { color: "#EF4444" }]}>{otpError}</Text>
-                    {otpError.includes("not enabled") && (
-                      <Text style={[styles.errorText, { color: "#EF4444", fontSize: 11, opacity: 0.85 }]}>
-                        To fix: Go to Firebase Console → Authentication → Sign-in method → Enable "Phone"
-                      </Text>
-                    )}
-                  </View>
+                  <Text style={[styles.errorText, { color: "#EF4444" }]}>{googleError}</Text>
                 </View>
               ) : null}
 
-              <View style={[styles.otpInfo, { backgroundColor: GREEN + "12", borderColor: GREEN + "30" }]}>
+              <View style={[styles.googleInfo, { backgroundColor: GREEN + "12", borderColor: GREEN + "30" }]}>
                 <Feather name="info" size={14} color={GREEN} />
-                <Text style={[styles.otpInfoText, { color: GREEN }]}>
-                  Enter your registered phone number. An OTP will be sent to verify your identity.
+                <Text style={[styles.googleInfoText, { color: GREEN }]}>
+                  Use your Google account to sign in instantly. If it's your first time, an account will be created automatically.
                 </Text>
               </View>
 
-              <View style={styles.fieldGroup}>
-                <Text style={[styles.fieldLabel, { color: c.mutedForeground }]}>Phone Number</Text>
-                <View style={[styles.inputWrapper, { borderColor: c.border, backgroundColor: c.muted }]}>
-                  <Feather name="phone" size={16} color={c.mutedForeground} />
-                  <View style={[styles.phonePrefix, { borderRightColor: c.border }]}>
-                    <Text style={[styles.prefixText, { color: c.mutedForeground }]}>+91</Text>
-                  </View>
-                  <TextInput
-                    style={[styles.input, { color: c.foreground }]}
-                    placeholder="10-digit number"
-                    placeholderTextColor={c.mutedForeground}
-                    value={phone}
-                    onChangeText={(v) => setPhone(v.replace(/[^0-9]/g, "").slice(0, 10))}
-                    keyboardType="phone-pad"
-                    maxLength={10}
-                  />
-                  {phone.length === 10 && (
-                    <Feather name="check-circle" size={16} color={GREEN} />
-                  )}
-                </View>
-              </View>
-
               <TouchableOpacity
-                style={[styles.loginBtn, otpLoading && { opacity: 0.75 }]}
-                onPress={handleSendOTP}
-                disabled={otpLoading}
+                style={[styles.googleBtn, { borderColor: c.border, backgroundColor: c.card }]}
+                onPress={handleGoogleSignIn}
+                disabled={googleLoading}
                 activeOpacity={0.85}
               >
-                {otpLoading ? (
-                  <ActivityIndicator color="#fff" />
+                {googleLoading ? (
+                  <ActivityIndicator color={GREEN} />
                 ) : (
                   <>
-                    <Feather name="send" size={16} color="#fff" />
-                    <Text style={styles.loginBtnText}>Send OTP</Text>
+                    <AntDesign name="google" size={20} color="#EA4335" />
+                    <Text style={[styles.googleBtnText, { color: c.foreground }]}>Continue with Google</Text>
                   </>
                 )}
               </TouchableOpacity>
@@ -320,82 +282,54 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
     overflow: "hidden",
   },
-  circle1: {
-    position: "absolute", width: 220, height: 220, borderRadius: 110,
-    backgroundColor: "rgba(255,255,255,0.07)", top: -60, right: -60,
-  },
-  circle2: {
-    position: "absolute", width: 160, height: 160, borderRadius: 80,
-    backgroundColor: "rgba(255,255,255,0.07)", top: 40, left: -50,
-  },
-  circle3: {
-    position: "absolute", width: 100, height: 100, borderRadius: 50,
-    backgroundColor: "rgba(255,255,255,0.1)", bottom: 40, right: 30,
-  },
+  circle1: { position: "absolute", width: 220, height: 220, borderRadius: 110, backgroundColor: "rgba(255,255,255,0.07)", top: -60, right: -60 },
+  circle2: { position: "absolute", width: 160, height: 160, borderRadius: 80, backgroundColor: "rgba(255,255,255,0.07)", top: 40, left: -50 },
+  circle3: { position: "absolute", width: 100, height: 100, borderRadius: 50, backgroundColor: "rgba(255,255,255,0.1)", bottom: 40, right: 30 },
   headerContent: { alignItems: "center", paddingHorizontal: 24, paddingBottom: 20 },
   logoCircle: {
     width: 76, height: 76, borderRadius: 38, backgroundColor: "#fff",
     alignItems: "center", justifyContent: "center", marginBottom: 16,
-    shadowColor: "#000", shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.2, shadowRadius: 16, elevation: 10,
+    shadowColor: "#000", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.2, shadowRadius: 16, elevation: 10,
   },
   appName: { fontSize: 30, fontFamily: "Inter_700Bold", color: "#fff", marginBottom: 6 },
   tagline: { fontSize: 14, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.82)", textAlign: "center" },
   formCard: {
     flex: 1, borderTopLeftRadius: 32, borderTopRightRadius: 32,
     padding: 28, paddingTop: 32, gap: 16,
-    shadowColor: "#000", shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.08, shadowRadius: 20, elevation: 10,
+    shadowColor: "#000", shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.08, shadowRadius: 20, elevation: 10,
   },
   heading: { fontSize: 24, fontFamily: "Inter_700Bold" },
   subheading: { fontSize: 14, fontFamily: "Inter_400Regular", marginTop: -8 },
-  tabRow: {
-    flexDirection: "row", borderRadius: 12, padding: 4, borderWidth: 1,
-  },
-  tab: {
-    flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center",
-    gap: 6, paddingVertical: 10, borderRadius: 10,
-  },
+  tabRow: { flexDirection: "row", borderRadius: 12, padding: 4, borderWidth: 1 },
+  tab: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 10, borderRadius: 10 },
   tabText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
-  errorBox: {
-    flexDirection: "row", alignItems: "flex-start", gap: 8,
-    padding: 12, borderRadius: 10, borderWidth: 1,
-  },
+  errorBox: { flexDirection: "row", alignItems: "flex-start", gap: 8, padding: 12, borderRadius: 10, borderWidth: 1 },
   errorText: { fontSize: 13, fontFamily: "Inter_500Medium", flex: 1, lineHeight: 18 },
-  otpInfo: {
-    flexDirection: "row", alignItems: "flex-start", gap: 8,
-    padding: 12, borderRadius: 12, borderWidth: 1,
-  },
-  otpInfoText: { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 18 },
+  googleInfo: { flexDirection: "row", alignItems: "flex-start", gap: 8, padding: 12, borderRadius: 12, borderWidth: 1 },
+  googleInfoText: { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 18 },
   fieldGroup: { gap: 7 },
   fieldLabel: { fontSize: 13, fontFamily: "Inter_500Medium" },
-  inputWrapper: {
-    flexDirection: "row", alignItems: "center", gap: 10,
-    borderWidth: 1.5, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 13,
-  },
-  phonePrefix: { paddingRight: 8, borderRightWidth: 1, marginRight: 2 },
-  prefixText: { fontSize: 14, fontFamily: "Inter_500Medium" },
+  inputWrapper: { flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1.5, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 13 },
   input: { flex: 1, fontSize: 15, fontFamily: "Inter_400Regular" },
   loginBtn: {
     borderRadius: 14, paddingVertical: 16, alignItems: "center",
     backgroundColor: GREEN, flexDirection: "row", justifyContent: "center", gap: 8,
-    shadowColor: GREEN, shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35, shadowRadius: 12, elevation: 6, marginTop: 4,
+    shadowColor: GREEN, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.35, shadowRadius: 12, elevation: 6, marginTop: 4,
   },
   loginBtnText: { color: "#fff", fontSize: 16, fontFamily: "Inter_700Bold", letterSpacing: 0.3 },
   forgotBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 4 },
   forgotText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  googleBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 12,
+    borderWidth: 1.5, borderRadius: 14, paddingVertical: 16, marginTop: 4,
+    shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 2,
+  },
+  googleBtnText: { fontSize: 16, fontFamily: "Inter_600SemiBold" },
   divider: { flexDirection: "row", alignItems: "center", gap: 12 },
   dividerLine: { flex: 1, height: 1 },
   dividerText: { fontSize: 13, fontFamily: "Inter_400Regular" },
-  registerBtn: {
-    borderRadius: 14, paddingVertical: 14, alignItems: "center",
-    borderWidth: 1.5, flexDirection: "row", justifyContent: "center", gap: 8,
-  },
+  registerBtn: { borderRadius: 14, paddingVertical: 14, alignItems: "center", borderWidth: 1.5, flexDirection: "row", justifyContent: "center", gap: 8 },
   registerBtnText: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
-  footer: {
-    flexDirection: "row", alignItems: "center", justifyContent: "center",
-    gap: 6, paddingVertical: 24, backgroundColor: "#fff",
-  },
+  footer: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 24, backgroundColor: "#fff" },
   footerText: { fontSize: 12, fontFamily: "Inter_400Regular" },
 });

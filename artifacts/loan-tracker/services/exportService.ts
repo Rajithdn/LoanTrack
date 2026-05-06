@@ -11,7 +11,26 @@ function toCSV(rows: string[][]): string {
     .join("\n");
 }
 
+function downloadBlobWeb(csv: string, fileName: string): void {
+  const bom = "\uFEFF"; // UTF-8 BOM for Excel compatibility
+  const blob = new Blob([bom + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  a.style.display = "none";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  // Revoke after a short delay to ensure the download has started
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 export async function exportLoansCSV(loans: Loan[], users: UserProfile[], payments: Payment[]): Promise<void> {
+  if (!loans.length && !users.length && !payments.length) {
+    throw new Error("No data to export.");
+  }
+
   const userMap = new Map(users.map((u) => [u.id, u]));
 
   // ---- Section 1: Summary ----
@@ -104,40 +123,37 @@ export async function exportLoansCSV(loans: Loan[], users: UserProfile[], paymen
 
   const allRows = [...summaryRows, ...borrowerRows, ...loanRows, ...paymentRows];
   const csv = toCSV(allRows);
+  const fileName = `LoanTracker_Report_${new Date().toISOString().slice(0, 10)}.csv`;
 
+  // ── Web: use Blob + URL.createObjectURL (no window.open) ──────────────────
   if (Platform.OS === "web") {
-    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `LoanTracker_Report_${new Date().toISOString().slice(0, 10)}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    downloadBlobWeb(csv, fileName);
     return;
   }
 
-  const fileName = `LoanTracker_Report_${new Date().toISOString().slice(0, 10)}.csv`;
+  // ── Native mobile: write to filesystem then share ─────────────────────────
   const dir = FileSystem.documentDirectory ?? FileSystem.cacheDirectory;
   if (!dir) {
-    // Last resort: open as data URI in browser
-    const dataUri = `data:text/csv;charset=utf-8,${encodeURIComponent(csv)}`;
-    if (typeof window !== "undefined") window.open(dataUri, "_blank");
+    // Absolute last resort for native — write as data URI blob on web engine
+    if (typeof document !== "undefined") {
+      downloadBlobWeb(csv, fileName);
+    }
     return;
   }
+
   const path = dir + fileName;
   await FileSystem.writeAsStringAsync(path, csv, { encoding: FileSystem.EncodingType.UTF8 });
+
   try {
     const isAvailable = await Sharing.isAvailableAsync();
     if (isAvailable) {
       await Sharing.shareAsync(path, { mimeType: "text/csv", dialogTitle: "Export Full Report" });
     } else {
-      // Sharing not available — file is saved, inform caller via resolved promise
-      console.info("CSV saved to:", path);
+      // File saved silently — not a fatal error
+      console.info("[LoanTracker] CSV saved to:", path);
     }
   } catch {
-    // Sharing threw but file is written — not a fatal error
-    console.info("CSV saved to:", path);
+    // Sharing threw but file is already written — not fatal
+    console.info("[LoanTracker] CSV saved to:", path);
   }
 }

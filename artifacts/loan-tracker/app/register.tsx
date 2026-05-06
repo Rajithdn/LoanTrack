@@ -13,22 +13,26 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 import { Feather } from "@expo/vector-icons";
+import { AntDesign } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
-import { setPendingUser, setOtpMode, generateOTPCode, storeOTP } from "@/services/otpService";
+import { useAuth } from "@/context/AuthContext";
+import { register, signOut, signInWithGoogle } from "@/services/authService";
 
 const { height: SCREEN_H } = Dimensions.get("window");
 const GREEN = "#00A86B";
 
 export default function RegisterScreen() {
   const c = useColors();
+  const { setUser } = useAuth();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState("");
 
   const validate = (): string | null => {
@@ -39,26 +43,38 @@ export default function RegisterScreen() {
     return null;
   };
 
-  const handleSendOtp = async () => {
+  const handleRegister = async () => {
     const err = validate();
     if (err) { setError(err); return; }
     setError("");
     setLoading(true);
     try {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      const code = generateOTPCode();
-      // Store OTP in Firestore (keyed by email), NOT shown in UI
-      await storeOTP(email.trim(), code);
-      // In production: send via SMS/email API. For dev, log to console only.
-      if (__DEV__) console.log("[DEV] OTP for", email.trim(), ":", code);
-      setPendingUser({ name: name.trim(), email: email.trim(), password, phone: phone.trim() });
-      setOtpMode("mock_register");
-      router.push("/otp");
+      await register(name.trim(), email.trim(), password, phone.trim());
+      await signOut();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      router.replace("/login");
     } catch (e: any) {
-      setError(e?.message ?? "Something went wrong. Please try again.");
+      setError(e?.message ?? "Registration failed. Please try again.");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGoogleRegister = async () => {
+    setError("");
+    setGoogleLoading(true);
+    try {
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      const profile = await signInWithGoogle();
+      setUser(profile);
+      router.replace(profile.role === "admin" ? "/(admin)/dashboard" : "/(user)/dashboard");
+    } catch (e: any) {
+      setError(e?.message ?? "Google Sign-In failed. Please try again.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setGoogleLoading(false);
     }
   };
 
@@ -66,6 +82,7 @@ export default function RegisterScreen() {
     <KeyboardAvoidingView
       style={styles.flex}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
     >
       <ScrollView
         style={styles.flex}
@@ -98,6 +115,30 @@ export default function RegisterScreen() {
               <Text style={[styles.errorText, { color: "#EF4444" }]}>{error}</Text>
             </View>
           ) : null}
+
+          {/* Google Sign-Up */}
+          <TouchableOpacity
+            style={[styles.googleBtn, { borderColor: c.border, backgroundColor: c.card }]}
+            onPress={handleGoogleRegister}
+            disabled={googleLoading || loading}
+            activeOpacity={0.85}
+          >
+            {googleLoading ? (
+              <ActivityIndicator color={GREEN} />
+            ) : (
+              <>
+                <AntDesign name="google" size={20} color="#EA4335" />
+                <Text style={[styles.googleBtnText, { color: c.foreground }]}>Continue with Google</Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          {/* Divider */}
+          <View style={styles.divider}>
+            <View style={[styles.dividerLine, { backgroundColor: c.border }]} />
+            <Text style={[styles.dividerText, { color: c.mutedForeground }]}>or sign up with email</Text>
+            <View style={[styles.dividerLine, { backgroundColor: c.border }]} />
+          </View>
 
           {/* Full Name */}
           <View style={styles.fieldGroup}>
@@ -179,17 +220,17 @@ export default function RegisterScreen() {
           </View>
 
           <TouchableOpacity
-            style={[styles.registerBtn, loading && { opacity: 0.75 }]}
-            onPress={handleSendOtp}
-            disabled={loading}
+            style={[styles.registerBtn, (loading || googleLoading) && { opacity: 0.75 }]}
+            onPress={handleRegister}
+            disabled={loading || googleLoading}
             activeOpacity={0.85}
           >
             {loading ? (
               <ActivityIndicator color="#fff" />
             ) : (
               <>
-                <Feather name="shield" size={17} color="#fff" />
-                <Text style={styles.registerBtnText}>Send OTP & Verify</Text>
+                <Feather name="user-check" size={17} color="#fff" />
+                <Text style={styles.registerBtnText}>Create Account</Text>
               </>
             )}
           </TouchableOpacity>
@@ -210,11 +251,8 @@ const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: GREEN },
   scroll: { flexGrow: 1 },
   header: {
-    backgroundColor: GREEN,
-    paddingBottom: 60,
-    minHeight: SCREEN_H * 0.34,
-    justifyContent: "flex-end",
-    overflow: "hidden",
+    backgroundColor: GREEN, paddingBottom: 60,
+    minHeight: SCREEN_H * 0.34, justifyContent: "flex-end", overflow: "hidden",
   },
   circle1: { position: "absolute", width: 200, height: 200, borderRadius: 100, backgroundColor: "rgba(255,255,255,0.08)", top: -50, right: -50 },
   circle2: { position: "absolute", width: 130, height: 130, borderRadius: 65, backgroundColor: "rgba(255,255,255,0.06)", top: 30, left: -40 },
@@ -230,6 +268,15 @@ const styles = StyleSheet.create({
   formCard: { flex: 1, borderTopLeftRadius: 32, borderTopRightRadius: 32, padding: 28, paddingTop: 32, gap: 16 },
   errorBox: { flexDirection: "row", alignItems: "flex-start", gap: 8, padding: 12, borderRadius: 10, borderWidth: 1 },
   errorText: { fontSize: 13, fontFamily: "Inter_500Medium", flex: 1, lineHeight: 18 },
+  googleBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 12,
+    borderWidth: 1.5, borderRadius: 14, paddingVertical: 16,
+    shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 2,
+  },
+  googleBtnText: { fontSize: 16, fontFamily: "Inter_600SemiBold" },
+  divider: { flexDirection: "row", alignItems: "center", gap: 10 },
+  dividerLine: { flex: 1, height: 1 },
+  dividerText: { fontSize: 12, fontFamily: "Inter_400Regular" },
   fieldGroup: { gap: 7 },
   fieldLabel: { fontSize: 13, fontFamily: "Inter_500Medium" },
   inputWrapper: { flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1.5, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 13 },
