@@ -19,6 +19,7 @@ import { useAuth } from "@/context/AuthContext";
 import { getAllPayments, confirmPayment, rejectPayment } from "@/services/paymentService";
 import { getAllLoans } from "@/services/loanService";
 import { getAllUsers } from "@/services/userService";
+import { downloadPaymentReceipt } from "@/services/receiptService";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { PaymentItem } from "@/components/PaymentItem";
 import { NotificationBanner } from "@/components/NotificationBanner";
@@ -50,6 +51,7 @@ export default function PaymentsScreen() {
   const [selectedLoan, setSelectedLoan] = useState<Loan | null>(null);
   const [paymentMode, setPaymentMode] = useState<PaymentMode>("Cash");
   const [txNote, setTxNote] = useState("");
+  const [receiptLoadingId, setReceiptLoadingId] = useState<string | null>(null);
 
   const { data: payments = [], isLoading } = useQuery({ queryKey: ["payments"], queryFn: getAllPayments });
   const { data: loans = [] } = useQuery({ queryKey: ["loans"], queryFn: getAllLoans });
@@ -88,6 +90,23 @@ export default function PaymentsScreen() {
     setPaymentMode("Cash");
     setTxNote("");
     setConfirmModal(true);
+  };
+
+  const handleDownloadReceipt = async (payment: Payment) => {
+    const loan = loanMap.get(payment.loanId);
+    const borrower = users.find((u) => u.id === payment.userId);
+    if (!loan || !borrower) {
+      setNotification({ msg: "Could not find loan/borrower details for receipt.", type: "error" });
+      return;
+    }
+    setReceiptLoadingId(payment.id);
+    try {
+      await downloadPaymentReceipt(payment, loan, borrower, payment.updatedBy ?? "Admin");
+    } catch (e: any) {
+      setNotification({ msg: e?.message ?? "Failed to generate receipt.", type: "error" });
+    } finally {
+      setReceiptLoadingId(null);
+    }
   };
 
   const filtered = payments.filter((p) => {
@@ -199,6 +218,12 @@ export default function PaymentsScreen() {
                     ? () => rejectMutation.mutate({ paymentId: item.id, userId: item.userId, amount: item.amount })
                     : undefined
                 }
+                onDownloadReceipt={
+                  item.status === "confirmed"
+                    ? () => handleDownloadReceipt(item)
+                    : undefined
+                }
+                receiptLoading={receiptLoadingId === item.id}
               />
             );
           }}

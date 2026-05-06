@@ -7,6 +7,7 @@ import {
   signInWithPopup,
   signInWithRedirect,
   getRedirectResult,
+  signInWithCredential,
 } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { Platform } from "react-native";
@@ -85,7 +86,7 @@ async function signInOrCreateAdmin(): Promise<UserProfile> {
   return profile;
 }
 
-async function buildGoogleProfile(firebaseUser: any): Promise<UserProfile> {
+export async function buildGoogleProfile(firebaseUser: any): Promise<UserProfile> {
   let profile = await getUserProfile(firebaseUser.uid);
   if (!profile) {
     profile = {
@@ -111,16 +112,16 @@ export async function checkGoogleRedirectResult(): Promise<UserProfile | null> {
   }
 }
 
+// ── Web: popup → redirect fallback ───────────────────────────────────────────
 export async function signInWithGoogle(): Promise<UserProfile> {
   if (Platform.OS !== "web") {
-    throw new Error("Google Sign-In is available on the web version of this app. Please open the app in a browser.");
+    throw new Error("__NATIVE_UNSUPPORTED__");
   }
   try {
     const result = await signInWithPopup(auth, googleProvider);
     return await buildGoogleProfile(result.user);
   } catch (e: any) {
     const code: string = e?.code ?? "";
-    // Popup blocked or unsupported environment — fall back to redirect flow
     if (
       code.includes("popup-blocked") ||
       code.includes("operation-not-supported-in-this-environment") ||
@@ -128,9 +129,19 @@ export async function signInWithGoogle(): Promise<UserProfile> {
       code.includes("internal-error")
     ) {
       await signInWithRedirect(auth, googleProvider);
-      // signInWithRedirect navigates away; result handled in checkGoogleRedirectResult on return
       return new Promise(() => {});
     }
+    throw new Error(parseFirebaseError(e));
+  }
+}
+
+// ── Native: called after expo-auth-session returns an id_token ───────────────
+export async function signInWithGoogleIdToken(idToken: string): Promise<UserProfile> {
+  try {
+    const credential = GoogleAuthProvider.credential(idToken);
+    const result = await signInWithCredential(auth, credential);
+    return await buildGoogleProfile(result.user);
+  } catch (e: any) {
     throw new Error(parseFirebaseError(e));
   }
 }

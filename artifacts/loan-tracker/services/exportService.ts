@@ -1,9 +1,17 @@
-import * as FileSystem from "expo-file-system";
+import * as _FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import { Platform } from "react-native";
 import type { UserProfile } from "./authService";
 import type { Loan } from "./loanService";
 import type { Payment } from "./paymentService";
+
+// Cast to any: expo-file-system v19 restructured types but the runtime API still works.
+// StorageAccessFramework, cacheDirectory, documentDirectory, writeAsStringAsync are all valid at runtime.
+const FileSystem = _FileSystem as any;
+
+// Use string literal — FileSystem.EncodingType is undefined in Expo Go
+const UTF8 = "utf8";
+const BOM = "\uFEFF";
 
 function toCSV(rows: string[][]): string {
   return rows
@@ -22,10 +30,8 @@ function triggerAnchorDownload(a: HTMLAnchorElement): void {
 }
 
 function downloadBlobWeb(csv: string, fileName: string): void {
-  const bom = "\uFEFF";
-  const content = bom + csv;
+  const content = BOM + csv;
 
-  // Attempt 1: Blob URL + anchor click
   try {
     const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
@@ -38,7 +44,6 @@ function downloadBlobWeb(csv: string, fileName: string): void {
     return;
   } catch {}
 
-  // Attempt 2: Data URI anchor click
   try {
     const encoded = encodeURIComponent(content);
     const a = document.createElement("a");
@@ -49,7 +54,6 @@ function downloadBlobWeb(csv: string, fileName: string): void {
     return;
   } catch {}
 
-  // Attempt 3: Open in new tab (user can File → Save)
   try {
     const encoded = encodeURIComponent(content);
     const tab = window.open(`data:text/csv;charset=utf-8,${encoded}`, "_blank");
@@ -64,9 +68,10 @@ function downloadBlobWeb(csv: string, fileName: string): void {
 // ── Android: save directly to Downloads via Storage Access Framework ──────────
 
 async function saveToAndroidDownloads(csv: string, fileName: string): Promise<boolean> {
+  // StorageAccessFramework is only available on Android native builds
+  if (!FileSystem.StorageAccessFramework?.requestDirectoryPermissionsAsync) return false;
+
   try {
-    const bom = "\uFEFF";
-    // Use SAF to create a file directly in the user-chosen directory (defaults to Downloads)
     const permissions =
       await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
     if (!permissions.granted) return false;
@@ -76,29 +81,18 @@ async function saveToAndroidDownloads(csv: string, fileName: string): Promise<bo
       fileName,
       "text/csv"
     );
-    await FileSystem.writeAsStringAsync(fileUri, bom + csv, {
-      encoding: FileSystem.EncodingType.UTF8,
-    });
+    await FileSystem.writeAsStringAsync(fileUri, BOM + csv, { encoding: UTF8 });
     return true;
   } catch {
     return false;
   }
 }
 
-// ── Main export function ──────────────────────────────────────────────────────
+// ── Build CSV rows ────────────────────────────────────────────────────────────
 
-export async function exportLoansCSV(
-  loans: Loan[],
-  users: UserProfile[],
-  payments: Payment[]
-): Promise<{ savedDirectly: boolean }> {
-  if (!loans.length && !users.length && !payments.length) {
-    throw new Error("No data to export.");
-  }
-
+function buildCSV(loans: Loan[], users: UserProfile[], payments: Payment[]): string {
   const userMap = new Map(users.map((u) => [u.id, u]));
 
-  // ---- Section 1: Summary ----
   const summaryRows: string[][] = [
     ["=== LOAN TRACKER — FULL REPORT ==="],
     [`Generated: ${new Date().toLocaleString("en-IN")}`],
@@ -118,29 +112,23 @@ export async function exportLoansCSV(
     [],
   ];
 
-  // ---- Section 2: Borrowers ----
   const borrowerRows: string[][] = [
     ["--- BORROWERS ---"],
     ["Name", "Email", "Phone", "Active Loans", "Completed Loans", "Total Borrowed", "Total Paid", "Total Pending"],
   ];
   for (const u of users) {
-    const userLoans = loans.filter((l) => l.userId === u.id);
-    const activeCount = userLoans.filter((l) => l.status === "active").length;
-    const completedCount = userLoans.filter((l) => l.status === "completed").length;
+    const ul = loans.filter((l) => l.userId === u.id);
     borrowerRows.push([
-      u.name,
-      u.email,
-      u.phone ? `+91 ${u.phone}` : "",
-      String(activeCount),
-      String(completedCount),
-      String(userLoans.reduce((s, l) => s + l.amount, 0)),
-      String(userLoans.reduce((s, l) => s + l.paidAmount, 0)),
-      String(userLoans.reduce((s, l) => s + l.pendingAmount, 0)),
+      u.name, u.email, u.phone ? `+91 ${u.phone}` : "",
+      String(ul.filter((l) => l.status === "active").length),
+      String(ul.filter((l) => l.status === "completed").length),
+      String(ul.reduce((s, l) => s + l.amount, 0)),
+      String(ul.reduce((s, l) => s + l.paidAmount, 0)),
+      String(ul.reduce((s, l) => s + l.pendingAmount, 0)),
     ]);
   }
   borrowerRows.push([]);
 
-  // ---- Section 3: Loans ----
   const loanRows: string[][] = [
     ["--- LOANS ---"],
     ["Borrower", "Email", "Phone", "Amount (₹)", "Interest (%)", "Duration (months)", "EMI (₹)", "Total Payable (₹)", "Interest Amount (₹)", "Paid (₹)", "Pending (₹)", "Status", "Start Date"],
@@ -149,23 +137,15 @@ export async function exportLoansCSV(
     const u = userMap.get(loan.userId);
     loanRows.push([
       loan.userName ?? u?.name ?? loan.userId,
-      u?.email ?? "",
-      u?.phone ? `+91 ${u.phone}` : "",
-      String(loan.amount),
-      String(loan.interest),
-      String(loan.duration),
-      String(loan.emi),
-      String(loan.totalAmount),
-      String(loan.interestAmount ?? 0),
-      String(loan.paidAmount),
-      String(loan.pendingAmount),
-      loan.status,
+      u?.email ?? "", u?.phone ? `+91 ${u.phone}` : "",
+      String(loan.amount), String(loan.interest), String(loan.duration),
+      String(loan.emi), String(loan.totalAmount), String(loan.interestAmount ?? 0),
+      String(loan.paidAmount), String(loan.pendingAmount), loan.status,
       loan.startDate ? new Date(loan.startDate).toLocaleDateString("en-IN") : "",
     ]);
   }
   loanRows.push([]);
 
-  // ---- Section 4: Payments ----
   const paymentRows: string[][] = [
     ["--- PAYMENTS ---"],
     ["Borrower", "Email", "Amount (₹)", "Payment Mode", "Status", "Date", "Transaction Note"],
@@ -173,18 +153,28 @@ export async function exportLoansCSV(
   for (const p of payments) {
     const u = userMap.get(p.userId);
     paymentRows.push([
-      u?.name ?? p.userId,
-      u?.email ?? "",
-      String(p.amount),
-      p.paymentMode ?? "",
-      p.status,
+      u?.name ?? p.userId, u?.email ?? "", String(p.amount),
+      p.paymentMode ?? "", p.status,
       p.date ? new Date(p.date).toLocaleDateString("en-IN") : "",
       p.note ?? "",
     ]);
   }
 
-  const allRows = [...summaryRows, ...borrowerRows, ...loanRows, ...paymentRows];
-  const csv = toCSV(allRows);
+  return toCSV([...summaryRows, ...borrowerRows, ...loanRows, ...paymentRows]);
+}
+
+// ── Main export function ──────────────────────────────────────────────────────
+
+export async function exportLoansCSV(
+  loans: Loan[],
+  users: UserProfile[],
+  payments: Payment[]
+): Promise<{ savedDirectly: boolean }> {
+  if (!loans.length && !users.length && !payments.length) {
+    throw new Error("No data to export.");
+  }
+
+  const csv = buildCSV(loans, users, payments);
   const fileName = `LoanTracker_Report_${new Date().toISOString().slice(0, 10)}.csv`;
 
   // ── Web ───────────────────────────────────────────────────────────────────
@@ -202,11 +192,10 @@ export async function exportLoansCSV(
 
   // ── iOS + Android fallback: write to cache then open share sheet ───────────
   const dir = FileSystem.cacheDirectory ?? FileSystem.documentDirectory ?? "";
-  const path = dir + fileName;
-  const bom = "\uFEFF";
-  await FileSystem.writeAsStringAsync(path, bom + csv, {
-    encoding: FileSystem.EncodingType.UTF8,
-  });
+  if (!dir) throw new Error("Cannot access device storage.");
+
+  const path = `${dir}${fileName}`;
+  await FileSystem.writeAsStringAsync(path, BOM + csv, { encoding: UTF8 });
 
   try {
     const isAvailable = await Sharing.isAvailableAsync();
@@ -218,7 +207,7 @@ export async function exportLoansCSV(
       });
     }
   } catch {
-    // File is already written — not fatal
+    // File is already written to cache — not fatal
   }
 
   return { savedDirectly: false };

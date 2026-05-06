@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   ActivityIndicator,
   Dimensions,
@@ -15,13 +15,22 @@ import { router } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { AntDesign } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import * as WebBrowser from "expo-web-browser";
+import * as Google from "expo-auth-session/providers/google";
+import { GoogleAuthProvider, signInWithCredential } from "firebase/auth";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/context/AuthContext";
-import { signIn, signInWithGoogle } from "@/services/authService";
+import { signIn, signInWithGoogle, signInWithGoogleIdToken, buildGoogleProfile } from "@/services/authService";
+import { auth } from "@/services/firebase";
+
+// Required: handles the auth session redirect back from browser to Expo Go
+WebBrowser.maybeCompleteAuthSession();
 
 const { height: SCREEN_H } = Dimensions.get("window");
 const GREEN = "#00A86B";
+
+const GOOGLE_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? "";
 
 export default function LoginScreen() {
   const c = useColors();
@@ -38,6 +47,59 @@ export default function LoginScreen() {
   // Google login
   const [googleLoading, setGoogleLoading] = useState(false);
   const [googleError, setGoogleError] = useState("");
+
+  // ── Native Google OAuth via expo-auth-session ─────────────────────────────
+  // Hook must be at top-level. On web this is unused (we use Firebase signInWithPopup).
+  const [request, response, promptAsync] = Google.useAuthRequest(
+    GOOGLE_WEB_CLIENT_ID
+      ? { webClientId: GOOGLE_WEB_CLIENT_ID }
+      : { webClientId: "placeholder" } // never actually called if no client ID
+  );
+
+  useEffect(() => {
+    if (!response) return;
+    if (response.type === "success") {
+      const idToken = response.authentication?.idToken ?? (response.params as any)?.id_token;
+      if (idToken) {
+        signInWithGoogleIdToken(idToken)
+          .then((profile) => {
+            setUser(profile);
+            router.replace(profile.role === "admin" ? "/(admin)/dashboard" : "/(user)/dashboard");
+          })
+          .catch((e: any) => {
+            setGoogleError(e?.message ?? "Google Sign-In failed. Please try again.");
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          })
+          .finally(() => setGoogleLoading(false));
+      } else {
+        // No id_token — try access_token path
+        const accessToken = response.authentication?.accessToken ?? (response.params as any)?.access_token;
+        if (accessToken) {
+          const credential = GoogleAuthProvider.credential(null, accessToken);
+          signInWithCredential(auth, credential)
+            .then((result) => buildGoogleProfile(result.user))
+            .then((profile) => {
+              setUser(profile);
+              router.replace(profile.role === "admin" ? "/(admin)/dashboard" : "/(user)/dashboard");
+            })
+            .catch((e: any) => {
+              setGoogleError(e?.message ?? "Google Sign-In failed. Please try again.");
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+            })
+            .finally(() => setGoogleLoading(false));
+        } else {
+          setGoogleError("Google Sign-In failed. No token received.");
+          setGoogleLoading(false);
+        }
+      }
+    } else if (response.type === "error") {
+      setGoogleError("Google Sign-In failed. Please try again.");
+      setGoogleLoading(false);
+    } else if (response.type === "cancel" || response.type === "dismiss") {
+      setGoogleError("Sign-in was cancelled. Please try again.");
+      setGoogleLoading(false);
+    }
+  }, [response]);
 
   const handleLogin = async () => {
     if (!email.trim() || !password) {
@@ -62,17 +124,36 @@ export default function LoginScreen() {
   const handleGoogleSignIn = async () => {
     setGoogleError("");
     setGoogleLoading(true);
-    try {
-      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      const profile = await signInWithGoogle();
-      setUser(profile);
-      router.replace(profile.role === "admin" ? "/(admin)/dashboard" : "/(user)/dashboard");
-    } catch (e: any) {
-      setGoogleError(e?.message ?? "Google Sign-In failed. Please try again.");
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    } finally {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+
+    if (Platform.OS === "web") {
+      // Web: Firebase popup/redirect flow
+      try {
+        const profile = await signInWithGoogle();
+        setUser(profile);
+        router.replace(profile.role === "admin" ? "/(admin)/dashboard" : "/(user)/dashboard");
+      } catch (e: any) {
+        setGoogleError(e?.message ?? "Google Sign-In failed. Please try again.");
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      } finally {
+        setGoogleLoading(false);
+      }
+      return;
+    }
+
+    // Native: use expo-auth-session
+    if (!GOOGLE_WEB_CLIENT_ID) {
+      setGoogleError("Google Sign-In on mobile requires setup. Please contact the app administrator or use Email login.");
+      setGoogleLoading(false);
+      return;
+    }
+
+    // promptAsync will open the browser; response handled in useEffect above
+    const result = await promptAsync();
+    if (!result || result.type === "cancel" || result.type === "dismiss") {
       setGoogleLoading(false);
     }
+    // If success, useEffect handles the rest and clears loading
   };
 
   return (
@@ -227,7 +308,11 @@ export default function LoginScreen() {
               </View>
 
               <TouchableOpacity
-                style={[styles.googleBtn, { borderColor: c.border, backgroundColor: c.card }]}
+                style={[
+                  styles.googleBtn,
+                  { borderColor: c.border, backgroundColor: c.card },
+                  googleLoading && { opacity: 0.7 },
+                ]}
                 onPress={handleGoogleSignIn}
                 disabled={googleLoading}
                 activeOpacity={0.85}

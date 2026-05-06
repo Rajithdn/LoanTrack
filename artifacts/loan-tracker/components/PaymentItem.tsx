@@ -1,5 +1,5 @@
 import React from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useColors } from "@/hooks/useColors";
 import { StatusBadge } from "./StatusBadge";
@@ -9,6 +9,8 @@ interface PaymentItemProps {
   payment: Payment;
   onConfirm?: () => void;
   onReject?: () => void;
+  onDownloadReceipt?: () => void;
+  receiptLoading?: boolean;
   userName?: string;
   loanAmount?: string;
 }
@@ -20,7 +22,15 @@ const MODE_META: Record<PaymentMode, { icon: string; color: string; bg: string }
   "Bank Transfer":{ icon: "bank",             color: "#F59E0B", bg: "#F59E0B18" },
 };
 
-export function PaymentItem({ payment, onConfirm, onReject, userName, loanAmount }: PaymentItemProps) {
+export function PaymentItem({
+  payment,
+  onConfirm,
+  onReject,
+  onDownloadReceipt,
+  receiptLoading,
+  userName,
+  loanAmount,
+}: PaymentItemProps) {
   const c = useColors();
   const date = new Date(payment.date);
   const formatted = date.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
@@ -73,6 +83,7 @@ export function PaymentItem({ payment, onConfirm, onReject, userName, loanAmount
         <StatusBadge status={payment.status} />
       </View>
 
+      {/* Pending: Reject + Confirm actions */}
       {payment.status === "pending" && (onConfirm || onReject) && (
         <View style={styles.actions}>
           {onReject && (
@@ -94,6 +105,25 @@ export function PaymentItem({ payment, onConfirm, onReject, userName, loanAmount
             </TouchableOpacity>
           )}
         </View>
+      )}
+
+      {/* Confirmed: Download Receipt */}
+      {payment.status === "confirmed" && onDownloadReceipt && (
+        <TouchableOpacity
+          style={[styles.receiptBtn, { borderColor: c.primary + "50", backgroundColor: c.primary + "10" }]}
+          onPress={onDownloadReceipt}
+          disabled={receiptLoading}
+          activeOpacity={0.8}
+        >
+          {receiptLoading ? (
+            <ActivityIndicator size="small" color={c.primary} />
+          ) : (
+            <Feather name="download" size={13} color={c.primary} />
+          )}
+          <Text style={[styles.receiptBtnText, { color: c.primary }]}>
+            {receiptLoading ? "Generating..." : "Download Receipt"}
+          </Text>
+        </TouchableOpacity>
       )}
     </View>
   );
@@ -120,4 +150,9 @@ const styles = StyleSheet.create({
   },
   confirmBtn: { borderWidth: 0 },
   btnText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
+  receiptBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center",
+    gap: 6, paddingVertical: 9, borderRadius: 10, borderWidth: 1,
+  },
+  receiptBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
 });
