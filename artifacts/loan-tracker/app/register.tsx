@@ -34,6 +34,7 @@ export default function RegisterScreen() {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
   const validate = (): string | null => {
     if (!name.trim()) return "Please enter your full name.";
@@ -47,13 +48,17 @@ export default function RegisterScreen() {
     const err = validate();
     if (err) { setError(err); return; }
     setError("");
+    setSuccess("");
     setLoading(true);
     try {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       await register(name.trim(), email.trim(), password, phone.trim());
       await signOut();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      router.replace("/login");
+      setSuccess("Account created successfully. Please sign in.");
+      setTimeout(() => {
+        router.replace("/login");
+      }, 4000);
     } catch (e: any) {
       setError(e?.message ?? "Registration failed. Please try again.");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -109,6 +114,12 @@ export default function RegisterScreen() {
 
         {/* White form card */}
         <View style={[styles.formCard, { backgroundColor: c.card }]}>
+          {success ? (
+            <View style={[styles.errorBox, { backgroundColor: "#00A86B18", borderColor: "#00A86B40" }]}>
+              <Feather name="check-circle" size={14} color="#00A86B" />
+              <Text style={[styles.errorText, { color: "#00A86B" }]}>{success}</Text>
+            </View>
+          ) : null}
           {error ? (
             <View style={[styles.errorBox, { backgroundColor: "#FEE2E218", borderColor: "#EF444440" }]}>
               <Feather name="alert-circle" size={14} color="#EF4444" />

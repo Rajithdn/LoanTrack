@@ -5,6 +5,8 @@ import {
   sendPasswordResetEmail,
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
 } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { Platform } from "react-native";
@@ -83,27 +85,52 @@ async function signInOrCreateAdmin(): Promise<UserProfile> {
   return profile;
 }
 
+async function buildGoogleProfile(firebaseUser: any): Promise<UserProfile> {
+  let profile = await getUserProfile(firebaseUser.uid);
+  if (!profile) {
+    profile = {
+      id: firebaseUser.uid,
+      name: firebaseUser.displayName ?? firebaseUser.email?.split("@")[0] ?? "User",
+      email: firebaseUser.email ?? "",
+      phone: firebaseUser.phoneNumber ?? "",
+      role: "user",
+    };
+    await setDoc(doc(db, "users", firebaseUser.uid), profile);
+  }
+  return profile;
+}
+
+export async function checkGoogleRedirectResult(): Promise<UserProfile | null> {
+  if (Platform.OS !== "web") return null;
+  try {
+    const result = await getRedirectResult(auth);
+    if (!result) return null;
+    return await buildGoogleProfile(result.user);
+  } catch {
+    return null;
+  }
+}
+
 export async function signInWithGoogle(): Promise<UserProfile> {
   if (Platform.OS !== "web") {
-    throw new Error("Google Sign-In is available on the web version of this app.");
+    throw new Error("Google Sign-In is available on the web version of this app. Please open the app in a browser.");
   }
   try {
     const result = await signInWithPopup(auth, googleProvider);
-    const firebaseUser = result.user;
-    let profile = await getUserProfile(firebaseUser.uid);
-    if (!profile) {
-      // First-time Google user — create Firestore record
-      profile = {
-        id: firebaseUser.uid,
-        name: firebaseUser.displayName ?? firebaseUser.email?.split("@")[0] ?? "User",
-        email: firebaseUser.email ?? "",
-        phone: firebaseUser.phoneNumber ?? "",
-        role: "user",
-      };
-      await setDoc(doc(db, "users", firebaseUser.uid), profile);
-    }
-    return profile;
+    return await buildGoogleProfile(result.user);
   } catch (e: any) {
+    const code: string = e?.code ?? "";
+    // Popup blocked or unsupported environment — fall back to redirect flow
+    if (
+      code.includes("popup-blocked") ||
+      code.includes("operation-not-supported-in-this-environment") ||
+      code.includes("web-storage-unsupported") ||
+      code.includes("internal-error")
+    ) {
+      await signInWithRedirect(auth, googleProvider);
+      // signInWithRedirect navigates away; result handled in checkGoogleRedirectResult on return
+      return new Promise(() => {});
+    }
     throw new Error(parseFirebaseError(e));
   }
 }

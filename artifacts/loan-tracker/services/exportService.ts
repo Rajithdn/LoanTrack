@@ -13,17 +13,33 @@ function toCSV(rows: string[][]): string {
 
 function downloadBlobWeb(csv: string, fileName: string): void {
   const bom = "\uFEFF"; // UTF-8 BOM for Excel compatibility
-  const blob = new Blob([bom + csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = fileName;
-  a.style.display = "none";
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  // Revoke after a short delay to ensure the download has started
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  const content = bom + csv;
+
+  try {
+    // Primary: Blob + object URL (works in most modern browsers)
+    const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileName;
+    a.style.display = "none";
+    document.body.appendChild(a);
+    // Use dispatchEvent for better iframe/sandboxed environment compatibility
+    a.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  } catch {
+    // Fallback: data URI (works when blob URLs are blocked by CSP)
+    const encoded = encodeURIComponent(content);
+    const dataUri = `data:text/csv;charset=utf-8,${encoded}`;
+    const a = document.createElement("a");
+    a.href = dataUri;
+    a.download = fileName;
+    a.style.display = "none";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
 }
 
 export async function exportLoansCSV(loans: Loan[], users: UserProfile[], payments: Payment[]): Promise<void> {

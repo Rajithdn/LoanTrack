@@ -204,7 +204,7 @@ export default function UserDashboard() {
             </View>
             {/* EMI Calculator always accessible */}
             <TouchableOpacity
-              style={[styles.scheduleBtn, { borderColor: "#0D47A1" }]}
+              style={[styles.scheduleBtn, { borderColor: "#0D47A1", marginTop: 16 }]}
               onPress={() => setCalcModal(true)}
               activeOpacity={0.8}
             >

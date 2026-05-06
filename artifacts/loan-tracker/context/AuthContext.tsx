@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "@/services/firebase";
-import { getUserProfile, type UserProfile } from "@/services/authService";
+import { getUserProfile, checkGoogleRedirectResult, type UserProfile } from "@/services/authService";
 
 interface AuthContextType {
   user: UserProfile | null;
@@ -24,6 +24,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const loadingResolved = useRef(false);
 
   useEffect(() => {
+    // Handle Google redirect result (comes back after signInWithRedirect flow)
+    checkGoogleRedirectResult().then((profile) => {
+      if (profile) setUser(profile);
+    }).catch(() => {});
+
     // Safety timeout: if onAuthStateChanged never fires (e.g. Firebase blocked),
     // unblock the loading state after 8 seconds so the user can at least see the login screen.
     const timeout = setTimeout(() => {
