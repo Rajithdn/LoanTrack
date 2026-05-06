@@ -11,20 +11,21 @@ function toCSV(rows: string[][]): string {
     .join("\n");
 }
 
+// ── Web download helpers ──────────────────────────────────────────────────────
+
 function triggerAnchorDownload(a: HTMLAnchorElement): void {
   document.body.appendChild(a);
   a.click();
-  // Keep in DOM briefly so the browser can initiate the download before removal
   setTimeout(() => {
     try { document.body.removeChild(a); } catch {}
   }, 200);
 }
 
 function downloadBlobWeb(csv: string, fileName: string): void {
-  const bom = "\uFEFF"; // UTF-8 BOM for Excel compatibility
+  const bom = "\uFEFF";
   const content = bom + csv;
 
-  // Attempt 1: Blob URL + anchor click (works in all modern standalone browsers)
+  // Attempt 1: Blob URL + anchor click
   try {
     const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
@@ -37,7 +38,7 @@ function downloadBlobWeb(csv: string, fileName: string): void {
     return;
   } catch {}
 
-  // Attempt 2: Data URI anchor click (works when Blob/ObjectURL is restricted)
+  // Attempt 2: Data URI anchor click
   try {
     const encoded = encodeURIComponent(content);
     const a = document.createElement("a");
@@ -48,12 +49,11 @@ function downloadBlobWeb(csv: string, fileName: string): void {
     return;
   } catch {}
 
-  // Attempt 3: Open data URI in new tab as last resort (user can File→Save from there)
+  // Attempt 3: Open in new tab (user can File → Save)
   try {
     const encoded = encodeURIComponent(content);
     const tab = window.open(`data:text/csv;charset=utf-8,${encoded}`, "_blank");
     if (!tab) {
-      // Pop-up blocked — show raw CSV in a new tab via blob URL
       const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
       window.open(url, "_blank");
@@ -61,7 +61,37 @@ function downloadBlobWeb(csv: string, fileName: string): void {
   } catch {}
 }
 
-export async function exportLoansCSV(loans: Loan[], users: UserProfile[], payments: Payment[]): Promise<void> {
+// ── Android: save directly to Downloads via Storage Access Framework ──────────
+
+async function saveToAndroidDownloads(csv: string, fileName: string): Promise<boolean> {
+  try {
+    const bom = "\uFEFF";
+    // Use SAF to create a file directly in the user-chosen directory (defaults to Downloads)
+    const permissions =
+      await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+    if (!permissions.granted) return false;
+
+    const fileUri = await FileSystem.StorageAccessFramework.createFileAsync(
+      permissions.directoryUri,
+      fileName,
+      "text/csv"
+    );
+    await FileSystem.writeAsStringAsync(fileUri, bom + csv, {
+      encoding: FileSystem.EncodingType.UTF8,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// ── Main export function ──────────────────────────────────────────────────────
+
+export async function exportLoansCSV(
+  loans: Loan[],
+  users: UserProfile[],
+  payments: Payment[]
+): Promise<{ savedDirectly: boolean }> {
   if (!loans.length && !users.length && !payments.length) {
     throw new Error("No data to export.");
   }
@@ -97,18 +127,15 @@ export async function exportLoansCSV(loans: Loan[], users: UserProfile[], paymen
     const userLoans = loans.filter((l) => l.userId === u.id);
     const activeCount = userLoans.filter((l) => l.status === "active").length;
     const completedCount = userLoans.filter((l) => l.status === "completed").length;
-    const totalBorrowed = userLoans.reduce((s, l) => s + l.amount, 0);
-    const totalPaid = userLoans.reduce((s, l) => s + l.paidAmount, 0);
-    const totalPending = userLoans.reduce((s, l) => s + l.pendingAmount, 0);
     borrowerRows.push([
       u.name,
       u.email,
       u.phone ? `+91 ${u.phone}` : "",
       String(activeCount),
       String(completedCount),
-      String(totalBorrowed),
-      String(totalPaid),
-      String(totalPending),
+      String(userLoans.reduce((s, l) => s + l.amount, 0)),
+      String(userLoans.reduce((s, l) => s + l.paidAmount, 0)),
+      String(userLoans.reduce((s, l) => s + l.pendingAmount, 0)),
     ]);
   }
   borrowerRows.push([]);
@@ -160,35 +187,39 @@ export async function exportLoansCSV(loans: Loan[], users: UserProfile[], paymen
   const csv = toCSV(allRows);
   const fileName = `LoanTracker_Report_${new Date().toISOString().slice(0, 10)}.csv`;
 
-  // ── Web: use Blob + URL.createObjectURL (no window.open) ──────────────────
+  // ── Web ───────────────────────────────────────────────────────────────────
   if (Platform.OS === "web") {
     downloadBlobWeb(csv, fileName);
-    return;
+    return { savedDirectly: true };
   }
 
-  // ── Native mobile: write to filesystem then share ─────────────────────────
-  const dir = FileSystem.documentDirectory ?? FileSystem.cacheDirectory;
-  if (!dir) {
-    // Absolute last resort for native — write as data URI blob on web engine
-    if (typeof document !== "undefined") {
-      downloadBlobWeb(csv, fileName);
-    }
-    return;
+  // ── Android APK: try direct-save to Downloads via Storage Access Framework ─
+  if (Platform.OS === "android") {
+    const saved = await saveToAndroidDownloads(csv, fileName);
+    if (saved) return { savedDirectly: true };
+    // User cancelled the directory picker — fall through to share sheet
   }
 
+  // ── iOS + Android fallback: write to cache then open share sheet ───────────
+  const dir = FileSystem.cacheDirectory ?? FileSystem.documentDirectory ?? "";
   const path = dir + fileName;
-  await FileSystem.writeAsStringAsync(path, csv, { encoding: FileSystem.EncodingType.UTF8 });
+  const bom = "\uFEFF";
+  await FileSystem.writeAsStringAsync(path, bom + csv, {
+    encoding: FileSystem.EncodingType.UTF8,
+  });
 
   try {
     const isAvailable = await Sharing.isAvailableAsync();
     if (isAvailable) {
-      await Sharing.shareAsync(path, { mimeType: "text/csv", dialogTitle: "Export Full Report" });
-    } else {
-      // File saved silently — not a fatal error
-      console.info("[LoanTracker] CSV saved to:", path);
+      await Sharing.shareAsync(path, {
+        mimeType: "text/csv",
+        dialogTitle: "Save CSV Report",
+        UTI: "public.comma-separated-values-text",
+      });
     }
   } catch {
-    // Sharing threw but file is already written — not fatal
-    console.info("[LoanTracker] CSV saved to:", path);
+    // File is already written — not fatal
   }
+
+  return { savedDirectly: false };
 }

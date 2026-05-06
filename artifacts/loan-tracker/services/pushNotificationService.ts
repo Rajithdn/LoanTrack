@@ -167,6 +167,52 @@ export async function getAdminPushTokens(): Promise<string[]> {
   }
 }
 
+// ── Overdue loan alerts for admin ─────────────────────────────────────────────
+export async function notifyAdminOfOverdueLoans(loans: Array<{
+  id: string;
+  status: string;
+  emi: number;
+  startDate: string;
+  paidAmount: number;
+  duration: number;
+  userName?: string;
+}>): Promise<void> {
+  try {
+    const now = new Date();
+    const overdueLoans = loans.filter((l) => {
+      if (l.status !== "active") return false;
+      const start = new Date(l.startDate);
+      const monthsElapsed = Math.floor(
+        (now.getTime() - start.getTime()) / (30.44 * 24 * 60 * 60 * 1000)
+      );
+      if (monthsElapsed <= 0) return false;
+      const expectedPaid = Math.min(monthsElapsed, l.duration) * l.emi;
+      return l.paidAmount < expectedPaid - 1;
+    });
+
+    if (!overdueLoans.length) return;
+
+    const adminTokens = await getAdminPushTokens();
+    if (!adminTokens.length) return;
+
+    // Group into one notification if many overdue, or individual if few
+    if (overdueLoans.length === 1) {
+      const loan = overdueLoans[0];
+      await sendPushNotification(adminTokens, {
+        title: "⚠️ Overdue EMI Alert",
+        body: `${loan.userName ?? "A borrower"} has missed their EMI payment of ₹${loan.emi.toLocaleString("en-IN")}. Tap to review.`,
+        data: { type: "overdue_alert", loanId: loan.id, screen: "/(admin)/loans" },
+      });
+    } else {
+      await sendPushNotification(adminTokens, {
+        title: `⚠️ ${overdueLoans.length} Overdue EMIs`,
+        body: `${overdueLoans.length} borrowers have missed their EMI payments. Tap to review all loans.`,
+        data: { type: "overdue_alert", screen: "/(admin)/loans" },
+      });
+    }
+  } catch {}
+}
+
 // ── Push delivery via Expo push API ──────────────────────────────────────────
 export async function sendPushNotification(
   tokens: string | string[],

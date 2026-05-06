@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Platform,
@@ -23,6 +23,7 @@ import { getAllUsers } from "@/services/userService";
 import { getAllLoans } from "@/services/loanService";
 import { getAllPayments } from "@/services/paymentService";
 import { exportLoansCSV } from "@/services/exportService";
+import { notifyAdminOfOverdueLoans } from "@/services/pushNotificationService";
 import { signOut } from "@/services/authService";
 import { router } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
@@ -41,6 +42,15 @@ export default function AdminDashboard() {
   const { data: users = [], refetch: refetchUsers } = useQuery({ queryKey: ["users"], queryFn: getAllUsers });
   const { data: loans = [], refetch: refetchLoans } = useQuery({ queryKey: ["loans"], queryFn: getAllLoans });
   const { data: payments = [], refetch: refetchPayments, isLoading } = useQuery({ queryKey: ["payments"], queryFn: getAllPayments });
+
+  // Fire overdue alert push notifications once per session when loans load
+  const overdueAlertSent = useRef(false);
+  useEffect(() => {
+    if (loans.length > 0 && !overdueAlertSent.current && Platform.OS !== "web") {
+      overdueAlertSent.current = true;
+      notifyAdminOfOverdueLoans(loans).catch(() => {});
+    }
+  }, [loans]);
 
   const onRefresh = useCallback(async () => {
     await Promise.all([refetchUsers(), refetchLoans(), refetchPayments()]);
@@ -87,8 +97,13 @@ export default function AdminDashboard() {
     setExporting(true);
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
-      await exportLoansCSV(loans, users, payments);
-      setNotification({ message: "Report exported! Check your browser's Downloads folder.", type: "success" });
+      const result = await exportLoansCSV(loans, users, payments);
+      const msg = Platform.OS === "web"
+        ? "Report exported! Check your browser's Downloads folder."
+        : result.savedDirectly
+          ? "Report saved to your Downloads folder!"
+          : "Report ready — tap 'Save to Files' in the share sheet.";
+      setNotification({ message: msg, type: "success" });
     } catch (e: any) {
       setNotification({ message: e?.message ?? "Could not export. Please try again.", type: "error" });
     }
