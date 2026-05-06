@@ -135,7 +135,14 @@ export default function LoansScreen() {
               <Text style={[styles.emptyText, { color: c.mutedForeground }]}>No loans found</Text>
             </View>
           }
-          renderItem={({ item }) => <LoanCard loan={item} userName={item.userName} />}
+          renderItem={({ item }) => {
+            const start = new Date(item.startDate);
+            const now = new Date();
+            const monthsElapsed = Math.floor((now.getTime() - start.getTime()) / (30.44 * 24 * 60 * 60 * 1000));
+            const expectedPaid = Math.min(Math.max(monthsElapsed, 0), item.duration) * item.emi;
+            const isOverdue = item.status === "active" && monthsElapsed > 0 && item.paidAmount < expectedPaid - 1;
+            return <LoanCard loan={item} userName={item.userName} isOverdue={isOverdue} />;
+          }}
         />
       )}
 

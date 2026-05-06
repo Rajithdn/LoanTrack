@@ -156,6 +156,7 @@ export default function LoginScreen() {
                     keyboardType="email-address"
                     autoCapitalize="none"
                     autoCorrect={false}
+                    autoComplete="email"
                   />
                 </View>
               </View>
@@ -172,6 +173,7 @@ export default function LoginScreen() {
                     onChangeText={(v) => { setPassword(v); setError(""); }}
                     secureTextEntry={!showPass}
                     autoCorrect={false}
+                    autoComplete="current-password"
                   />
                   <TouchableOpacity
                     onPress={() => setShowPass((p) => !p)}

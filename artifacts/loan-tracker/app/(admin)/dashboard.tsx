@@ -72,6 +72,17 @@ export default function AdminDashboard() {
 
   const pendingPayments = payments.filter((p) => p.status === "pending").length;
 
+  // Overdue: active loans where paid amount is less than what should have been paid by now
+  const overdueLoans = loans.filter((l) => {
+    if (l.status !== "active") return false;
+    const start = new Date(l.startDate);
+    const now = new Date();
+    const monthsElapsed = Math.floor((now.getTime() - start.getTime()) / (30.44 * 24 * 60 * 60 * 1000));
+    if (monthsElapsed <= 0) return false;
+    const expectedPaid = Math.min(monthsElapsed, l.duration) * l.emi;
+    return l.paidAmount < expectedPaid - 1;
+  });
+
   const handleExport = async () => {
     setExporting(true);
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -187,6 +198,20 @@ export default function AdminDashboard() {
             </View>
           </View>
         </View>
+
+        {/* Overdue loans alert */}
+        {overdueLoans.length > 0 && (
+          <TouchableOpacity
+            style={[styles.alertBanner, { backgroundColor: "#EF444418", borderColor: "#EF444440" }]}
+            onPress={() => router.push("/(admin)/loans")}
+          >
+            <Feather name="alert-triangle" size={16} color="#EF4444" />
+            <Text style={[styles.alertText, { color: "#EF4444" }]}>
+              {overdueLoans.length} loan{overdueLoans.length > 1 ? "s" : ""} overdue — EMI payments missed
+            </Text>
+            <Feather name="chevron-right" size={16} color="#EF4444" />
+          </TouchableOpacity>
+        )}
 
         {/* Pending payments alert */}
         {pendingPayments > 0 && (
