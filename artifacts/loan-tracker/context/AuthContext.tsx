@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useRef, useState } from "r
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "@/services/firebase";
 import { getUserProfile, checkGoogleRedirectResult, type UserProfile } from "@/services/authService";
+import { registerForPushNotifications } from "@/services/pushNotificationService";
 
 interface AuthContextType {
   user: UserProfile | null;
@@ -45,6 +46,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (fbUser) {
         const profile = await getUserProfile(fbUser.uid);
         setUser(profile);
+        // Register for push notifications after login (native only, best-effort)
+        registerForPushNotifications(fbUser.uid).catch(() => {});
       } else {
         setUser(null);
       }

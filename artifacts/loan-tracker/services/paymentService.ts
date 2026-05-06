@@ -10,6 +10,7 @@ import {
 import { db } from "./firebase";
 import { updateLoanPaid, type Loan } from "./loanService";
 import { sendNotification } from "./notificationService";
+import { getPushToken, getAdminPushTokens, sendPushNotification } from "./pushNotificationService";
 
 export type PaymentMode = "PhonePe" | "Google Pay" | "Cash" | "Bank Transfer";
 
@@ -64,6 +65,16 @@ export async function submitPayment(
     paymentMode,
   };
   const ref = await addDoc(collection(db, "payments"), payment);
+
+  // Notify admin via push (best-effort)
+  getAdminPushTokens().then((tokens) =>
+    sendPushNotification(tokens, {
+      title: "New Payment Submitted",
+      body: `A borrower submitted ₹${amount.toLocaleString()} via ${paymentMode ?? "Cash"}. Tap to review.`,
+      data: { screen: "payments" },
+    })
+  ).catch(() => {});
+
   return { id: ref.id, ...payment };
 }
 
@@ -83,20 +94,35 @@ export async function confirmPayment(
   });
   await updateLoanPaid(payment.loanId, payment.amount, loan);
 
-  // Notify borrower
-  const modeLabel = paymentMode;
-  await sendNotification(
-    payment.userId,
-    `Your payment of ₹${payment.amount.toLocaleString()} via ${modeLabel} has been confirmed. ✓`,
-    "payment"
-  ).catch(() => {});
+  const msg = `Your payment of ₹${payment.amount.toLocaleString()} via ${paymentMode} has been confirmed. ✓`;
+
+  // In-app notification (Firestore)
+  await sendNotification(payment.userId, msg, "payment").catch(() => {});
+
+  // Push notification (best-effort)
+  getPushToken(payment.userId).then((token) => {
+    if (token) sendPushNotification(token, {
+      title: "Payment Confirmed ✓",
+      body: `₹${payment.amount.toLocaleString()} via ${paymentMode} confirmed by admin.`,
+      data: { screen: "dashboard" },
+    });
+  }).catch(() => {});
 }
 
 export async function rejectPayment(paymentId: string, userId: string, amount: number): Promise<void> {
   await updateDoc(doc(db, "payments", paymentId), { status: "rejected" });
-  await sendNotification(
-    userId,
-    `Your payment of ₹${amount.toLocaleString()} was not confirmed. Please contact admin.`,
-    "alert"
-  ).catch(() => {});
+
+  const msg = `Your payment of ₹${amount.toLocaleString()} was not confirmed. Please contact admin.`;
+
+  // In-app notification (Firestore)
+  await sendNotification(userId, msg, "alert").catch(() => {});
+
+  // Push notification (best-effort)
+  getPushToken(userId).then((token) => {
+    if (token) sendPushNotification(token, {
+      title: "Payment Not Confirmed",
+      body: `₹${amount.toLocaleString()} payment was rejected. Please contact your admin.`,
+      data: { screen: "dashboard" },
+    });
+  }).catch(() => {});
 }
