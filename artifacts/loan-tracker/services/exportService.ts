@@ -11,35 +11,54 @@ function toCSV(rows: string[][]): string {
     .join("\n");
 }
 
+function triggerAnchorDownload(a: HTMLAnchorElement): void {
+  document.body.appendChild(a);
+  a.click();
+  // Keep in DOM briefly so the browser can initiate the download before removal
+  setTimeout(() => {
+    try { document.body.removeChild(a); } catch {}
+  }, 200);
+}
+
 function downloadBlobWeb(csv: string, fileName: string): void {
   const bom = "\uFEFF"; // UTF-8 BOM for Excel compatibility
   const content = bom + csv;
 
+  // Attempt 1: Blob URL + anchor click (works in all modern standalone browsers)
   try {
-    // Primary: Blob + object URL (works in most modern browsers)
     const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
     a.download = fileName;
-    a.style.display = "none";
-    document.body.appendChild(a);
-    // Use dispatchEvent for better iframe/sandboxed environment compatibility
-    a.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 2000);
-  } catch {
-    // Fallback: data URI (works when blob URLs are blocked by CSP)
+    a.style.cssText = "display:none;position:fixed;top:-9999px;left:-9999px;";
+    triggerAnchorDownload(a);
+    setTimeout(() => { try { URL.revokeObjectURL(url); } catch {} }, 3000);
+    return;
+  } catch {}
+
+  // Attempt 2: Data URI anchor click (works when Blob/ObjectURL is restricted)
+  try {
     const encoded = encodeURIComponent(content);
-    const dataUri = `data:text/csv;charset=utf-8,${encoded}`;
     const a = document.createElement("a");
-    a.href = dataUri;
+    a.href = `data:text/csv;charset=utf-8,${encoded}`;
     a.download = fileName;
-    a.style.display = "none";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  }
+    a.style.cssText = "display:none;position:fixed;top:-9999px;left:-9999px;";
+    triggerAnchorDownload(a);
+    return;
+  } catch {}
+
+  // Attempt 3: Open data URI in new tab as last resort (user can File→Save from there)
+  try {
+    const encoded = encodeURIComponent(content);
+    const tab = window.open(`data:text/csv;charset=utf-8,${encoded}`, "_blank");
+    if (!tab) {
+      // Pop-up blocked — show raw CSV in a new tab via blob URL
+      const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank");
+    }
+  } catch {}
 }
 
 export async function exportLoansCSV(loans: Loan[], users: UserProfile[], payments: Payment[]): Promise<void> {

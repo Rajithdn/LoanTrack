@@ -9,6 +9,78 @@ export interface PushMessage {
   data?: Record<string, any>;
 }
 
+// ── EMI due-date reminder scheduling (native only) ──────────────────────────
+export async function scheduleEMIReminders(loans: Array<{
+  id: string;
+  status: string;
+  emi: number;
+  startDate: string;
+  paidAmount: number;
+  duration: number;
+}>): Promise<void> {
+  if (Platform.OS === "web") return;
+
+  try {
+    const Notifications = await import("expo-notifications");
+
+    // Cancel all previously scheduled EMI reminders before rescheduling
+    const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+    const emiReminders = scheduled.filter(
+      (n) => (n.content.data as any)?.type === "emi_reminder"
+    );
+    await Promise.all(
+      emiReminders.map((n) => Notifications.cancelScheduledNotificationAsync(n.identifier))
+    );
+
+    const activeLoans = loans.filter((l) => l.status === "active");
+
+    for (const loan of activeLoans) {
+      const start = new Date(loan.startDate);
+      const progress = loan.paidAmount / (loan.emi * loan.duration || 1);
+      const paidMonths = Math.floor(progress * loan.duration);
+      const nextDueDate = new Date(
+        start.getFullYear(),
+        start.getMonth() + paidMonths + 1,
+        start.getDate()
+      );
+
+      // Remind 1 day before the due date at 9 AM
+      const reminderDate = new Date(nextDueDate);
+      reminderDate.setDate(reminderDate.getDate() - 1);
+      reminderDate.setHours(9, 0, 0, 0);
+
+      // Only schedule if the reminder is in the future
+      if (reminderDate.getTime() > Date.now() + 60_000) {
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title: "EMI Due Tomorrow! 💰",
+            body: `Your EMI of ₹${loan.emi.toLocaleString("en-IN")} is due tomorrow. Tap to submit payment.`,
+            sound: true,
+            data: { type: "emi_reminder", loanId: loan.id, screen: "dashboard" },
+          },
+          trigger: {
+            type: Notifications.SchedulableTriggerInputTypes.DATE,
+            date: reminderDate,
+          },
+        }).catch(() => {});
+      } else if (
+        // Same-day reminder: due date is today or tomorrow, hasn't been reminded yet
+        nextDueDate.toDateString() === new Date().toDateString()
+      ) {
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title: "EMI Due Today! ⚠️",
+            body: `Your EMI of ₹${loan.emi.toLocaleString("en-IN")} is due today. Please submit your payment.`,
+            sound: true,
+            data: { type: "emi_reminder", loanId: loan.id, screen: "dashboard" },
+          },
+          trigger: null, // fire immediately
+        }).catch(() => {});
+      }
+    }
+  } catch {}
+}
+
 // ── Token registration (native only) ─────────────────────────────────────────
 export async function registerForPushNotifications(userId: string): Promise<string | null> {
   if (Platform.OS === "web") return null;
@@ -34,16 +106,25 @@ export async function registerForPushNotifications(userId: string): Promise<stri
 
     if (finalStatus !== "granted") return null;
 
-    const Constants = (await import("expo-constants")).default;
-    const projectId =
-      Constants.expoConfig?.extra?.eas?.projectId ??
-      Constants.easConfig?.projectId ??
-      undefined;
+    // getExpoPushTokenAsync only works in a real build (development build or standalone)
+    // It is intentionally unsupported in Expo Go since SDK 53 — skip gracefully
+    let token: string;
+    try {
+      const Constants = (await import("expo-constants")).default;
+      const projectId =
+        Constants.expoConfig?.extra?.eas?.projectId ??
+        Constants.easConfig?.projectId ??
+        undefined;
 
-    const tokenData = await Notifications.getExpoPushTokenAsync(
-      projectId ? { projectId } : undefined
-    );
-    const token = tokenData.data;
+      const tokenData = await Notifications.getExpoPushTokenAsync(
+        projectId ? { projectId } : undefined
+      );
+      token = tokenData.data;
+    } catch {
+      // Running in Expo Go — remote push tokens not available; local scheduled
+      // notifications (EMI reminders) still work fine
+      return null;
+    }
 
     await setDoc(doc(db, "pushTokens", userId), {
       userId,

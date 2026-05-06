@@ -5,7 +5,10 @@ import {
   browserSessionPersistence,
   inMemoryPersistence,
   getAuth,
+  getReactNativePersistence,
 } from "firebase/auth";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Platform } from "react-native";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
@@ -24,13 +27,20 @@ if (!app) {
   app = initializeApp(firebaseConfig);
 }
 
-// Use session persistence to avoid IndexedDB issues in embedded iframes.
-// Falls back to in-memory if session storage is also unavailable.
+// Use platform-appropriate persistence:
+// - Web: browser storage (local → session → memory fallback chain)
+// - Native (iOS/Android): AsyncStorage so auth survives app restarts
 let auth: ReturnType<typeof getAuth>;
 try {
-  auth = initializeAuth(app, {
-    persistence: [browserLocalPersistence, browserSessionPersistence, inMemoryPersistence],
-  });
+  if (Platform.OS === "web") {
+    auth = initializeAuth(app, {
+      persistence: [browserLocalPersistence, browserSessionPersistence, inMemoryPersistence],
+    });
+  } else {
+    auth = initializeAuth(app, {
+      persistence: getReactNativePersistence(AsyncStorage),
+    });
+  }
 } catch {
   // initializeAuth throws if auth was already initialized (e.g. hot reload)
   auth = getAuth(app);

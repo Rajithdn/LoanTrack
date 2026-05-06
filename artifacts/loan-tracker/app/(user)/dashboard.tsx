@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
@@ -24,6 +24,7 @@ import { getLoansByUser } from "@/services/loanService";
 import { submitPayment } from "@/services/paymentService";
 import { getNotificationsForUser, markAllRead } from "@/services/notificationService";
 import { signOut } from "@/services/authService";
+import { scheduleEMIReminders } from "@/services/pushNotificationService";
 import { NotificationBanner } from "@/components/NotificationBanner";
 import { StatusBadge } from "@/components/StatusBadge";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -77,6 +78,13 @@ export default function UserDashboard() {
 
   const loan = loans[0];
   const unreadCount = notifications.filter((n) => !n.read).length;
+
+  // Schedule EMI due-date reminders whenever loans update (native only)
+  useEffect(() => {
+    if (loans.length > 0 && Platform.OS !== "web") {
+      scheduleEMIReminders(loans).catch(() => {});
+    }
+  }, [loans]);
 
   const payMutation = useMutation({
     mutationFn: ({ loanId, amount }: { loanId: string; amount: number }) =>

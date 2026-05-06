@@ -88,7 +88,7 @@ export default function AdminDashboard() {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
       await exportLoansCSV(loans, users, payments);
-      setNotification({ message: "Report exported successfully!", type: "success" });
+      setNotification({ message: "Report exported! Check your browser's Downloads folder.", type: "success" });
     } catch (e: any) {
       setNotification({ message: e?.message ?? "Could not export. Please try again.", type: "error" });
     }
