@@ -12,10 +12,18 @@ export default function IndexScreen() {
   const [onboardingDone, setOnboardingDone] = useState(false);
 
   useEffect(() => {
-    AsyncStorage.getItem("onboarding_done").then((val) => {
-      setOnboardingDone(val === "1");
-      setCheckingOnboarding(false);
-    });
+    AsyncStorage.getItem("onboarding_done")
+      .then((val) => {
+        setOnboardingDone(val === "1");
+      })
+      .catch(() => {
+        // If AsyncStorage fails (e.g. iframe/deployed environment), treat onboarding as done
+        // so the user reaches the login screen rather than being stuck on a spinner.
+        setOnboardingDone(true);
+      })
+      .finally(() => {
+        setCheckingOnboarding(false);
+      });
   }, []);
 
   useEffect(() => {

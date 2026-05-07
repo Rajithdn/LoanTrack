@@ -30,28 +30,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (profile) setUser(profile);
     }).catch(() => {});
 
-    // Safety timeout: if onAuthStateChanged never fires (e.g. Firebase blocked),
-    // unblock the loading state after 8 seconds so the user can at least see the login screen.
+    // Safety timeout: if onAuthStateChanged never fires (e.g. Firebase blocked or iframe),
+    // unblock the loading state after 4 seconds so the user can at least see the login screen.
     const timeout = setTimeout(() => {
       if (!loadingResolved.current) {
         loadingResolved.current = true;
         setLoading(false);
       }
-    }, 8000);
+    }, 4000);
 
     const unsub = onAuthStateChanged(auth, async (fbUser) => {
       clearTimeout(timeout);
       loadingResolved.current = true;
       setFirebaseUser(fbUser);
-      if (fbUser) {
-        const profile = await getUserProfile(fbUser.uid);
-        setUser(profile);
-        // Register for push notifications after login (native only, best-effort)
-        registerForPushNotifications(fbUser.uid).catch(() => {});
-      } else {
+      try {
+        if (fbUser) {
+          const profile = await getUserProfile(fbUser.uid);
+          setUser(profile);
+          // Register for push notifications after login (native only, best-effort)
+          registerForPushNotifications(fbUser.uid).catch(() => {});
+        } else {
+          setUser(null);
+        }
+      } catch {
+        // Ensure loading is always resolved even if Firestore is unreachable
         setUser(null);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     return () => {
