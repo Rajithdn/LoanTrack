@@ -91,6 +91,8 @@ export async function registerForPushNotifications(userId: string): Promise<stri
     Notifications.setNotificationHandler({
       handleNotification: async () => ({
         shouldShowAlert: true,
+        shouldShowBanner: true,
+        shouldShowList: true,
         shouldPlaySound: true,
         shouldSetBadge: true,
       }),

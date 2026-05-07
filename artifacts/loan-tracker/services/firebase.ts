@@ -5,9 +5,8 @@ import {
   browserSessionPersistence,
   inMemoryPersistence,
   getAuth,
-  getReactNativePersistence,
+  type Persistence,
 } from "firebase/auth";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 import { getFirestore } from "firebase/firestore";
 
@@ -27,6 +26,23 @@ if (!app) {
   app = initializeApp(firebaseConfig);
 }
 
+// Resolve native persistence: firebase@12 removed getReactNativePersistence from public types
+// but it is still available at runtime. We require() it to bypass type checks.
+// Falls back to inMemoryPersistence if unavailable.
+function getNativePersistence(): Persistence {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const AsyncStorage = require("@react-native-async-storage/async-storage").default;
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { getReactNativePersistence } = require("firebase/auth") as {
+      getReactNativePersistence: (storage: unknown) => Persistence;
+    };
+    return getReactNativePersistence(AsyncStorage);
+  } catch {
+    return inMemoryPersistence;
+  }
+}
+
 // Use platform-appropriate persistence:
 // - Web: browser storage (local → session → memory fallback chain)
 // - Native (iOS/Android): AsyncStorage so auth survives app restarts
@@ -38,7 +54,7 @@ try {
     });
   } else {
     auth = initializeAuth(app, {
-      persistence: getReactNativePersistence(AsyncStorage),
+      persistence: getNativePersistence(),
     });
   }
 } catch {

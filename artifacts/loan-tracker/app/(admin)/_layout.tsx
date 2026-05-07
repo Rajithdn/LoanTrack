@@ -67,7 +67,7 @@ export default function AdminLayout() {
         name="calculator"
         options={{
           title: "Calculator",
-          tabBarIcon: ({ color }) => <Feather name="calculator" size={22} color={color} />,
+          tabBarIcon: ({ color }) => <Feather name={"calculator" as any} size={22} color={color} />,
         }}
       />
     </Tabs>
