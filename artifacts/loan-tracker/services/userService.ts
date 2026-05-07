@@ -8,8 +8,8 @@ import {
   query,
   where,
 } from "firebase/firestore";
-import { createUserWithEmailAndPassword } from "firebase/auth";
-import { auth, db } from "./firebase";
+import { createUserWithEmailAndPassword, signOut as firebaseSignOut } from "firebase/auth";
+import { auth, secondaryAuth, db } from "./firebase";
 import type { UserProfile } from "./authService";
 
 export async function getAllUsers(): Promise<UserProfile[]> {
@@ -38,15 +38,23 @@ export async function addUser(
   password: string,
   phone?: string
 ): Promise<UserProfile> {
-  const cred = await createUserWithEmailAndPassword(auth, email, password);
+  // IMPORTANT: Use secondaryAuth so creating a new user does NOT sign out the currently
+  // logged-in admin. Firebase automatically signs in the newly created user — using a
+  // separate auth instance prevents that from affecting the primary session.
+  const cred = await createUserWithEmailAndPassword(secondaryAuth, email, password);
+  const uid = cred.user.uid;
+
+  // Sign out from the secondary instance immediately — we only needed it for account creation.
+  await firebaseSignOut(secondaryAuth).catch(() => {});
+
   const profile: UserProfile = {
-    id: cred.user.uid,
+    id: uid,
     name,
     email,
     phone: phone ?? "",
     role: "user",
   };
-  await setDoc(doc(db, "users", cred.user.uid), profile);
+  await setDoc(doc(db, "users", uid), profile);
   return profile;
 }
 

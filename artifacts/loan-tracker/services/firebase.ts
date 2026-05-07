@@ -1,4 +1,4 @@
-import { initializeApp, getApps } from "firebase/app";
+import { initializeApp, getApps, getApp } from "firebase/app";
 import {
   initializeAuth,
   browserLocalPersistence,
@@ -21,14 +21,14 @@ const firebaseConfig = {
   measurementId: process.env.EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
-let app = getApps()[0];
-if (!app) {
-  app = initializeApp(firebaseConfig);
-}
+// ── Primary app ───────────────────────────────────────────────────────────────
+let app = getApps().find((a) => a.name === "[DEFAULT]") ?? initializeApp(firebaseConfig);
+
+// ── Secondary app (used only for creating new users without signing out the admin) ──
+let secondaryApp = getApps().find((a) => a.name === "secondary") ?? initializeApp(firebaseConfig, "secondary");
 
 // Resolve native persistence: firebase@12 removed getReactNativePersistence from public types
 // but it is still available at runtime. We require() it to bypass type checks.
-// Falls back to inMemoryPersistence if unavailable.
 function getNativePersistence(): Persistence {
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -43,9 +43,7 @@ function getNativePersistence(): Persistence {
   }
 }
 
-// Use platform-appropriate persistence:
-// - Web: browser storage (local → session → memory fallback chain)
-// - Native (iOS/Android): AsyncStorage so auth survives app restarts
+// ── Primary auth ──────────────────────────────────────────────────────────────
 let auth: ReturnType<typeof getAuth>;
 try {
   if (Platform.OS === "web") {
@@ -58,10 +56,17 @@ try {
     });
   }
 } catch {
-  // initializeAuth throws if auth was already initialized (e.g. hot reload)
   auth = getAuth(app);
 }
 
-export { auth };
+// ── Secondary auth (inMemory only — used to create users without affecting admin session) ──
+let secondaryAuth: ReturnType<typeof getAuth>;
+try {
+  secondaryAuth = initializeAuth(secondaryApp, { persistence: inMemoryPersistence });
+} catch {
+  secondaryAuth = getAuth(secondaryApp);
+}
+
+export { auth, secondaryAuth };
 export const db = getFirestore(app);
 export default app;

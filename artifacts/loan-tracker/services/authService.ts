@@ -70,12 +70,27 @@ async function signInOrCreateAdmin(): Promise<UserProfile> {
   try {
     const cred = await signInWithEmailAndPassword(auth, ADMIN_EMAIL, ADMIN_PASSWORD);
     uid = cred.user.uid;
-  } catch (e: any) {
-    if (e?.code === "auth/user-not-found" || e?.code === "auth/invalid-credential") {
-      const cred = await createUserWithEmailAndPassword(auth, ADMIN_EMAIL, ADMIN_PASSWORD);
-      uid = cred.user.uid;
+  } catch (signInErr: any) {
+    const code: string = signInErr?.code ?? "";
+    // Firebase v12 uses "auth/invalid-credential" for both wrong-password AND user-not-found.
+    // Try to create the admin account; if it already exists, the password in Firebase Console
+    // differs from our default — surface a clear error.
+    if (code === "auth/user-not-found" || code === "auth/invalid-credential") {
+      try {
+        const cred = await createUserWithEmailAndPassword(auth, ADMIN_EMAIL, ADMIN_PASSWORD);
+        uid = cred.user.uid;
+      } catch (createErr: any) {
+        if (createErr?.code === "auth/email-already-in-use") {
+          // Account exists but password doesn't match — admin may have changed it in console
+          throw new Error(
+            "Admin account exists but the password doesn't match. " +
+            "Please reset it in the Firebase Console under Authentication → Users."
+          );
+        }
+        throw new Error(parseFirebaseError(createErr));
+      }
     } else {
-      throw new Error(parseFirebaseError(e));
+      throw new Error(parseFirebaseError(signInErr));
     }
   }
   let profile = await getUserProfile(uid);

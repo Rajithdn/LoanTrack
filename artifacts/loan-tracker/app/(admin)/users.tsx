@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Modal,
   Platform,
@@ -206,6 +205,7 @@ export default function UsersScreen() {
   const [form, setForm] = useState({ name: "", email: "", phone: "", password: "" });
   const [formError, setFormError] = useState("");
   const [notification, setNotification] = useState<{ message: string; type: "success" | "error" | "warning" | "info" } | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ user: UserProfile; message: string } | null>(null);
 
   const { data: users = [], isLoading } = useQuery({ queryKey: ["users"], queryFn: getAllUsers });
 
@@ -231,29 +231,32 @@ export default function UsersScreen() {
   });
 
   const checkAndDelete = async (u: UserProfile) => {
+    let loans: Loan[] = [];
     try {
-      const loans = await getLoansByUser(u.id);
-      const activeLoans = loans.filter((l) => l.status === "active");
-      if (activeLoans.length > 0) {
-        setNotification({
-          message: `${u.name} has ${activeLoans.length} active loan${activeLoans.length > 1 ? "s" : ""}. Close all active loans before deleting.`,
-          type: "warning",
-        });
-        return;
-      }
-      Alert.alert(
-        "Delete Borrower",
-        loans.length > 0
-          ? `${u.name} has completed loans on record. Are you sure you want to remove this borrower?`
-          : `Remove ${u.name}?`,
-        [
-          { text: "Cancel", style: "cancel" },
-          { text: "Delete", style: "destructive", onPress: () => deleteMutation.mutate(u.id) },
-        ]
-      );
+      loans = await getLoansByUser(u.id);
     } catch {
-      setNotification({ message: "Could not verify loan records. Please try again.", type: "error" });
+      // If loan check fails, still allow deletion with a warning message
+      setDeleteConfirm({
+        user: u,
+        message: `Could not verify loan records for ${u.name}. Proceed with deletion anyway?`,
+      });
+      return;
     }
+    const activeLoans = loans.filter((l) => l.status === "active");
+    if (activeLoans.length > 0) {
+      setNotification({
+        message: `${u.name} has ${activeLoans.length} active loan${activeLoans.length > 1 ? "s" : ""}. Close all active loans before deleting.`,
+        type: "warning",
+      });
+      return;
+    }
+    setDeleteConfirm({
+      user: u,
+      message:
+        loans.length > 0
+          ? `${u.name} has completed loans on record. Are you sure you want to remove this borrower? This cannot be undone.`
+          : `Are you sure you want to remove ${u.name}? This cannot be undone.`,
+    });
   };
 
   const filtered = users.filter(
@@ -385,6 +388,52 @@ export default function UsersScreen() {
           />
         )}
       </View>
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        visible={!!deleteConfirm}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setDeleteConfirm(null)}
+      >
+        <View style={styles.deleteOverlay}>
+          <View style={[styles.deleteDialog, { backgroundColor: c.card, borderColor: c.border }]}>
+            <View style={[styles.deleteIconWrap, { backgroundColor: c.destructive + "15" }]}>
+              <Feather name="trash-2" size={28} color={c.destructive} />
+            </View>
+            <Text style={[styles.deleteTitle, { color: c.foreground }]}>Delete Borrower</Text>
+            <Text style={[styles.deleteMsg, { color: c.mutedForeground }]}>
+              {deleteConfirm?.message}
+            </Text>
+            <View style={styles.deleteActions}>
+              <TouchableOpacity
+                style={[styles.deleteCancelBtn, { borderColor: c.border }]}
+                onPress={() => setDeleteConfirm(null)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.deleteCancelText, { color: c.foreground }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.deleteConfirmBtn, { backgroundColor: c.destructive }]}
+                onPress={() => {
+                  if (deleteConfirm) {
+                    deleteMutation.mutate(deleteConfirm.user.id);
+                    setDeleteConfirm(null);
+                  }
+                }}
+                activeOpacity={0.85}
+                disabled={deleteMutation.isPending}
+              >
+                {deleteMutation.isPending ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={styles.deleteConfirmText}>Delete</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Borrower Detail Modal */}
       <BorrowerDetailModal
@@ -526,6 +575,32 @@ const styles = StyleSheet.create({
   input: { flex: 1, fontSize: 15, fontFamily: "Inter_400Regular" },
   saveBtn: { borderRadius: 12, paddingVertical: 15, alignItems: "center", marginTop: 8 },
   saveBtnText: { color: "#fff", fontSize: 16, fontFamily: "Inter_600SemiBold" },
+  // Delete confirmation modal
+  deleteOverlay: {
+    flex: 1, backgroundColor: "rgba(0,0,0,0.55)",
+    alignItems: "center", justifyContent: "center", padding: 24,
+  },
+  deleteDialog: {
+    width: "100%", maxWidth: 360, borderRadius: 20, borderWidth: 1,
+    padding: 28, alignItems: "center", gap: 12,
+    shadowColor: "#000", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.18, shadowRadius: 20, elevation: 12,
+  },
+  deleteIconWrap: {
+    width: 64, height: 64, borderRadius: 32, alignItems: "center", justifyContent: "center", marginBottom: 4,
+  },
+  deleteTitle: { fontSize: 20, fontFamily: "Inter_700Bold", textAlign: "center" },
+  deleteMsg: { fontSize: 14, fontFamily: "Inter_400Regular", textAlign: "center", lineHeight: 21 },
+  deleteActions: { flexDirection: "row", gap: 12, marginTop: 8, width: "100%" },
+  deleteCancelBtn: {
+    flex: 1, borderRadius: 12, borderWidth: 1.5,
+    paddingVertical: 13, alignItems: "center",
+  },
+  deleteCancelText: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
+  deleteConfirmBtn: {
+    flex: 1, borderRadius: 12,
+    paddingVertical: 13, alignItems: "center",
+  },
+  deleteConfirmText: { color: "#fff", fontSize: 15, fontFamily: "Inter_600SemiBold" },
 });
 
 const detailStyles = StyleSheet.create({
