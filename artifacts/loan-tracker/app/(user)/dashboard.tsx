@@ -216,7 +216,7 @@ export default function UserDashboard() {
               onPress={() => setCalcModal(true)}
               activeOpacity={0.8}
             >
-              <Feather name={"calculator" as any} size={16} color="#0D47A1" />
+              <Feather name="hash" size={16} color="#0D47A1" />
               <Text style={[styles.scheduleBtnText, { color: "#0D47A1" }]}>EMI Calculator</Text>
               <Feather name="chevron-right" size={16} color="#0D47A1" />
             </TouchableOpacity>
@@ -351,7 +351,7 @@ export default function UserDashboard() {
               onPress={() => setCalcModal(true)}
               activeOpacity={0.8}
             >
-              <Feather name={"calculator" as any} size={16} color="#0D47A1" />
+              <Feather name="hash" size={16} color="#0D47A1" />
               <Text style={[styles.scheduleBtnText, { color: "#0D47A1" }]}>EMI Calculator</Text>
               <Feather name="chevron-right" size={16} color="#0D47A1" />
             </TouchableOpacity>

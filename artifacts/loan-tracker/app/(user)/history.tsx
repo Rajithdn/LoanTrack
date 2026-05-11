@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -6,6 +6,7 @@ import {
   StatusBar,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -15,9 +16,13 @@ import { useColors } from "@/hooks/useColors";
 import { useTheme } from "@/context/ThemeContext";
 import { useAuth } from "@/context/AuthContext";
 import { getPaymentsByUser } from "@/services/paymentService";
+import { getLoansByUser } from "@/services/loanService";
+import { getAllUsers } from "@/services/userService";
+import { downloadPaymentReceipt } from "@/services/receiptService";
 import { useQuery } from "@tanstack/react-query";
 import { PaymentItem } from "@/components/PaymentItem";
 import { ScreenHeader } from "@/components/ScreenHeader";
+import { NotificationBanner } from "@/components/NotificationBanner";
 
 const MODE_META: Record<string, { icon: string; color: string }> = {
   PhonePe:         { icon: "cellphone", color: "#7B3FE4" },
@@ -32,14 +37,51 @@ export default function HistoryScreen() {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
 
+  const [receiptLoadingId, setReceiptLoadingId] = useState<string | null>(null);
+  const [notification, setNotification] = useState<{ msg: string; type: "success" | "error" } | null>(null);
+
   const { data: payments = [], isLoading } = useQuery({
     queryKey: ["userPayments", user?.id],
     queryFn: () => getPaymentsByUser(user!.id),
     enabled: !!user,
   });
 
-  const totalPaid    = payments.filter((p) => p.status === "confirmed").reduce((s, p) => s + p.amount, 0);
-  const pendingCount = payments.filter((p) => p.status === "pending").length;
+  const { data: loans = [] } = useQuery({
+    queryKey: ["userLoans", user?.id],
+    queryFn: () => getLoansByUser(user!.id),
+    enabled: !!user,
+  });
+
+  // For receipt we need borrower profile — use current user
+  const { data: allUsers = [] } = useQuery({
+    queryKey: ["users"],
+    queryFn: getAllUsers,
+    enabled: !!user,
+  });
+
+  const loanMap = new Map(loans.map((l) => [l.id, l]));
+  const userProfile = allUsers.find((u) => u.id === user?.id) ?? null;
+
+  const handleDownloadReceipt = async (paymentId: string) => {
+    const payment = payments.find((p) => p.id === paymentId);
+    if (!payment) return;
+    const loan = loanMap.get(payment.loanId);
+    if (!loan || !userProfile) {
+      setNotification({ msg: "Could not load receipt data. Please try again.", type: "error" });
+      return;
+    }
+    setReceiptLoadingId(paymentId);
+    try {
+      await downloadPaymentReceipt(payment, loan, userProfile, payment.updatedBy ?? "Admin");
+    } catch (e: any) {
+      setNotification({ msg: e?.message ?? "Failed to generate receipt.", type: "error" });
+    } finally {
+      setReceiptLoadingId(null);
+    }
+  };
+
+  const totalPaid     = payments.filter((p) => p.status === "confirmed").reduce((s, p) => s + p.amount, 0);
+  const pendingCount  = payments.filter((p) => p.status === "pending").length;
   const confirmedCount = payments.filter((p) => p.status === "confirmed").length;
 
   const modeBreakdown: Record<string, number> = {};
@@ -90,12 +132,30 @@ export default function HistoryScreen() {
           </View>
         </View>
       )}
+
+      {confirmedCount > 0 && (
+        <View style={[styles.receiptHint, { backgroundColor: c.primary + "10", borderColor: c.primary + "25" }]}>
+          <Feather name="file-text" size={13} color={c.primary} />
+          <Text style={[styles.receiptHintText, { color: c.primary }]}>
+            Tap the receipt icon on any confirmed payment to download your PDF receipt.
+          </Text>
+        </View>
+      )}
     </View>
   );
 
   return (
     <View style={[styles.root, { backgroundColor: "#00A86B" }]}>
       <StatusBar barStyle="light-content" backgroundColor="#00A86B" />
+
+      {notification && (
+        <NotificationBanner
+          message={notification.msg}
+          type={notification.type}
+          onDismiss={() => setNotification(null)}
+        />
+      )}
+
       <ScreenHeader
         title="Payment History"
         subtitle={`${payments.length} transactions`}
@@ -120,7 +180,17 @@ export default function HistoryScreen() {
                 </Text>
               </View>
             }
-            renderItem={({ item }) => <PaymentItem payment={item} />}
+            renderItem={({ item }) => (
+              <PaymentItem
+                payment={item}
+                onDownloadReceipt={
+                  item.status === "confirmed"
+                    ? () => handleDownloadReceipt(item.id)
+                    : undefined
+                }
+                receiptLoading={receiptLoadingId === item.id}
+              />
+            )}
           />
         )}
       </View>
@@ -145,6 +215,11 @@ const styles = StyleSheet.create({
   },
   modeChipText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
   modeChipAmt: { fontSize: 12, fontFamily: "Inter_700Bold" },
+  receiptHint: {
+    flexDirection: "row", alignItems: "flex-start", gap: 8,
+    padding: 12, borderRadius: 10, borderWidth: 1, marginBottom: 12,
+  },
+  receiptHintText: { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17 },
   empty: { alignItems: "center", paddingTop: 60, gap: 10 },
   emptyTitle: { fontSize: 18, fontFamily: "Inter_600SemiBold" },
   emptyText: { fontSize: 14, fontFamily: "Inter_400Regular", textAlign: "center", paddingHorizontal: 30 },

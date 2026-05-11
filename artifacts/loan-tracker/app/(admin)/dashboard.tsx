@@ -248,7 +248,7 @@ export default function AdminDashboard() {
             { label: "Loans",      icon: "briefcase",  route: "/(admin)/loans"      },
             { label: "Users",      icon: "users",       route: "/(admin)/users"      },
             { label: "Payments",   icon: "credit-card", route: "/(admin)/payments"   },
-            { label: "Calculator", icon: "calculator",  route: "/(admin)/calculator" },
+            { label: "Calculator", icon: "hash",  route: "/(admin)/calculator" },
           ].map((item) => (
             <TouchableOpacity
               key={item.label}
