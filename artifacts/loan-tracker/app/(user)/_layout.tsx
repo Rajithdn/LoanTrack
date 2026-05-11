@@ -5,12 +5,23 @@ import { Feather } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { useColors } from "@/hooks/useColors";
 import { useTheme } from "@/context/ThemeContext";
+import { useAuth } from "@/context/AuthContext";
+import { useQuery } from "@tanstack/react-query";
+import { getApplicationsByUser } from "@/services/loanApplicationService";
 
 export default function UserLayout() {
   const c = useColors();
   const { isDark } = useTheme();
+  const { user } = useAuth();
   const isIOS = Platform.OS === "ios";
   const isWeb = Platform.OS === "web";
+
+  const { data: applications = [] } = useQuery({
+    queryKey: ["my-applications", user?.id],
+    queryFn: () => getApplicationsByUser(user!.id),
+    enabled: !!user,
+  });
+  const pendingCount = applications.filter((a) => a.status === "pending").length;
 
   return (
     <Tabs
@@ -54,6 +65,15 @@ export default function UserLayout() {
         options={{
           title: "History",
           tabBarIcon: ({ color }) => <Feather name="list" size={22} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="apply"
+        options={{
+          title: "Apply",
+          tabBarIcon: ({ color }) => <Feather name="file-plus" size={22} color={color} />,
+          tabBarBadge: pendingCount > 0 ? pendingCount : undefined,
+          tabBarBadgeStyle: { backgroundColor: "#F59E0B", fontSize: 10 },
         }}
       />
     </Tabs>

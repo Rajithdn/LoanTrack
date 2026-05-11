@@ -1,16 +1,8 @@
-import * as _FileSystem from "expo-file-system";
-import * as Sharing from "expo-sharing";
-import { Platform } from "react-native";
+import { Platform, Share } from "react-native";
 import type { UserProfile } from "./authService";
 import type { Loan } from "./loanService";
 import type { Payment } from "./paymentService";
 
-// Cast to any: expo-file-system v19 restructured types but the runtime API still works.
-// StorageAccessFramework, cacheDirectory, documentDirectory, writeAsStringAsync are all valid at runtime.
-const FileSystem = _FileSystem as any;
-
-// Use string literal — FileSystem.EncodingType is undefined in Expo Go
-const UTF8 = "utf8";
 const BOM = "\uFEFF";
 
 function toCSV(rows: string[][]): string {
@@ -18,77 +10,6 @@ function toCSV(rows: string[][]): string {
     .map((row) => row.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(","))
     .join("\n");
 }
-
-// ── Web download helpers ──────────────────────────────────────────────────────
-
-function triggerAnchorDownload(a: HTMLAnchorElement): void {
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(() => {
-    try { document.body.removeChild(a); } catch {}
-  }, 200);
-}
-
-function downloadBlobWeb(csv: string, fileName: string): void {
-  const content = BOM + csv;
-
-  try {
-    const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = fileName;
-    a.style.cssText = "display:none;position:fixed;top:-9999px;left:-9999px;";
-    triggerAnchorDownload(a);
-    setTimeout(() => { try { URL.revokeObjectURL(url); } catch {} }, 3000);
-    return;
-  } catch {}
-
-  try {
-    const encoded = encodeURIComponent(content);
-    const a = document.createElement("a");
-    a.href = `data:text/csv;charset=utf-8,${encoded}`;
-    a.download = fileName;
-    a.style.cssText = "display:none;position:fixed;top:-9999px;left:-9999px;";
-    triggerAnchorDownload(a);
-    return;
-  } catch {}
-
-  try {
-    const encoded = encodeURIComponent(content);
-    const tab = window.open(`data:text/csv;charset=utf-8,${encoded}`, "_blank");
-    if (!tab) {
-      const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      window.open(url, "_blank");
-    }
-  } catch {}
-}
-
-// ── Android: save directly to Downloads via Storage Access Framework ──────────
-
-async function saveToAndroidDownloads(csv: string, fileName: string): Promise<boolean> {
-  // StorageAccessFramework is only available on Android native builds
-  if (!FileSystem.StorageAccessFramework?.requestDirectoryPermissionsAsync) return false;
-
-  try {
-    const permissions =
-      await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
-    if (!permissions.granted) return false;
-
-    const fileUri = await FileSystem.StorageAccessFramework.createFileAsync(
-      permissions.directoryUri,
-      fileName,
-      "text/csv"
-    );
-    await FileSystem.writeAsStringAsync(fileUri, BOM + csv, { encoding: UTF8 });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-// ── Build CSV rows ────────────────────────────────────────────────────────────
 
 function buildCSV(loans: Loan[], users: UserProfile[], payments: Payment[]): string {
   const userMap = new Map(users.map((u) => [u.id, u]));
@@ -163,7 +84,55 @@ function buildCSV(loans: Loan[], users: UserProfile[], payments: Payment[]): str
   return toCSV([...summaryRows, ...borrowerRows, ...loanRows, ...paymentRows]);
 }
 
-// ── Main export function ──────────────────────────────────────────────────────
+function downloadBlobWeb(csv: string, fileName: string): void {
+  const content = BOM + csv;
+  try {
+    const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileName;
+    a.style.cssText = "display:none;position:fixed;top:-9999px;left:-9999px;";
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { try { document.body.removeChild(a); URL.revokeObjectURL(url); } catch {} }, 3000);
+    return;
+  } catch {}
+  try {
+    const encoded = encodeURIComponent(content);
+    const a = document.createElement("a");
+    a.href = `data:text/csv;charset=utf-8,${encoded}`;
+    a.download = fileName;
+    a.style.cssText = "display:none;position:fixed;top:-9999px;left:-9999px;";
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { try { document.body.removeChild(a); } catch {} }, 200);
+  } catch {}
+}
+
+async function tryFileSystemExport(csv: string, fileName: string): Promise<boolean> {
+  try {
+    const FileSystem = require("expo-file-system");
+    const Sharing = require("expo-sharing");
+
+    const dir = FileSystem.cacheDirectory ?? FileSystem.documentDirectory;
+    if (!dir) return false;
+
+    const path = `${dir}${fileName}`;
+    await FileSystem.writeAsStringAsync(path, BOM + csv, { encoding: "utf8" });
+
+    const isAvailable = await Sharing.isAvailableAsync();
+    if (isAvailable) {
+      await Sharing.shareAsync(path, {
+        mimeType: "text/csv",
+        dialogTitle: "Save CSV Report",
+        UTI: "public.comma-separated-values-text",
+      });
+      return true;
+    }
+  } catch {}
+  return false;
+}
 
 export async function exportLoansCSV(
   loans: Loan[],
@@ -177,38 +146,21 @@ export async function exportLoansCSV(
   const csv = buildCSV(loans, users, payments);
   const fileName = `LoanTracker_Report_${new Date().toISOString().slice(0, 10)}.csv`;
 
-  // ── Web ───────────────────────────────────────────────────────────────────
   if (Platform.OS === "web") {
     downloadBlobWeb(csv, fileName);
     return { savedDirectly: true };
   }
 
-  // ── Android APK: try direct-save to Downloads via Storage Access Framework ─
-  if (Platform.OS === "android") {
-    const saved = await saveToAndroidDownloads(csv, fileName);
-    if (saved) return { savedDirectly: true };
-    // User cancelled the directory picker — fall through to share sheet
-  }
+  const fileOk = await tryFileSystemExport(csv, fileName);
+  if (fileOk) return { savedDirectly: false };
 
-  // ── iOS + Android fallback: write to cache then open share sheet ───────────
-  const dir = FileSystem.cacheDirectory ?? FileSystem.documentDirectory ?? "";
-  if (!dir) throw new Error("Cannot access device storage.");
-
-  const path = `${dir}${fileName}`;
-  await FileSystem.writeAsStringAsync(path, BOM + csv, { encoding: UTF8 });
-
-  try {
-    const isAvailable = await Sharing.isAvailableAsync();
-    if (isAvailable) {
-      await Sharing.shareAsync(path, {
-        mimeType: "text/csv",
-        dialogTitle: "Save CSV Report",
-        UTI: "public.comma-separated-values-text",
-      });
-    }
-  } catch {
-    // File is already written to cache — not fatal
-  }
+  await Share.share(
+    {
+      title: fileName,
+      message: csv,
+    },
+    { dialogTitle: "Save or Share CSV Report" }
+  );
 
   return { savedDirectly: false };
 }
