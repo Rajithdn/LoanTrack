@@ -1,6 +1,7 @@
 import {
   collection,
   doc,
+  getDoc,
   getDocs,
   addDoc,
   updateDoc,
@@ -29,10 +30,9 @@ export interface LoanApplication {
 
 async function getAdminUserIds(): Promise<string[]> {
   try {
-    const snap = await getDocs(
-      query(collection(db, "users"), where("role", "==", "admin"))
-    );
-    return snap.docs.map((d) => d.id);
+    const snap = await getDoc(doc(db, "config", "admins"));
+    if (!snap.exists()) return [];
+    return (snap.data()?.ids as string[]) ?? [];
   } catch {
     return [];
   }

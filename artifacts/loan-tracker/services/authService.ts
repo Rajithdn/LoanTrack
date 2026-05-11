@@ -9,7 +9,7 @@ import {
   getRedirectResult,
   signInWithCredential,
 } from "firebase/auth";
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, arrayUnion } from "firebase/firestore";
 import { Platform } from "react-native";
 import { auth, db } from "./firebase";
 
@@ -98,6 +98,13 @@ async function signInOrCreateAdmin(): Promise<UserProfile> {
     profile = { id: uid, name: "Administrator", email: ADMIN_EMAIL, role: "admin" };
     await setDoc(doc(db, "users", uid), profile);
   }
+  // Store admin UID in a config doc so any authenticated user can look it up
+  // without needing read access to the whole users collection
+  await setDoc(
+    doc(db, "config", "admins"),
+    { ids: arrayUnion(uid) },
+    { merge: true }
+  ).catch(() => {});
   return profile;
 }
 

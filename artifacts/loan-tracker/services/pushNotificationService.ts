@@ -1,5 +1,5 @@
 import { Platform } from "react-native";
-import { doc, setDoc, getDoc, collection, getDocs, query, where } from "firebase/firestore";
+import { doc, setDoc, getDoc } from "firebase/firestore";
 import { db } from "./firebase";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -154,10 +154,9 @@ export async function getPushToken(userId: string): Promise<string | null> {
 
 export async function getAdminPushTokens(): Promise<string[]> {
   try {
-    const usersSnap = await getDocs(
-      query(collection(db, "users"), where("role", "==", "admin"))
-    );
-    const adminIds = usersSnap.docs.map((d) => d.id);
+    const snap = await getDoc(doc(db, "config", "admins"));
+    if (!snap.exists()) return [];
+    const adminIds: string[] = (snap.data()?.ids as string[]) ?? [];
     const tokens: string[] = [];
     for (const id of adminIds) {
       const t = await getPushToken(id);
