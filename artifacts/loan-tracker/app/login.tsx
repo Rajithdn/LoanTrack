@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
   ActivityIndicator,
   Dimensions,
@@ -15,91 +15,27 @@ import { router } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { AntDesign } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import * as WebBrowser from "expo-web-browser";
-import * as Google from "expo-auth-session/providers/google";
-import { GoogleAuthProvider, signInWithCredential } from "firebase/auth";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/context/AuthContext";
-import { signIn, signInWithGoogle, signInWithGoogleIdToken, buildGoogleProfile } from "@/services/authService";
-import { auth } from "@/services/firebase";
-
-// Required: handles the auth session redirect back from browser to Expo Go
-WebBrowser.maybeCompleteAuthSession();
+import { signIn, signInWithGoogle } from "@/services/authService";
 
 const { height: SCREEN_H } = Dimensions.get("window");
 const GREEN = "#00A86B";
-
-const GOOGLE_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? "";
 
 export default function LoginScreen() {
   const c = useColors();
   const { setUser } = useAuth();
   const [tab, setTab] = useState<"email" | "google">("email");
 
-  // Email login
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // Google login
   const [googleLoading, setGoogleLoading] = useState(false);
   const [googleError, setGoogleError] = useState("");
-
-  // ── Native Google OAuth via expo-auth-session ─────────────────────────────
-  // Hook must be at top-level. On web this is unused (we use Firebase signInWithPopup).
-  const [request, response, promptAsync] = Google.useAuthRequest(
-    GOOGLE_WEB_CLIENT_ID
-      ? { webClientId: GOOGLE_WEB_CLIENT_ID }
-      : { webClientId: "placeholder" } // never actually called if no client ID
-  );
-
-  useEffect(() => {
-    if (!response) return;
-    if (response.type === "success") {
-      const idToken = response.authentication?.idToken ?? (response.params as any)?.id_token;
-      if (idToken) {
-        signInWithGoogleIdToken(idToken)
-          .then((profile) => {
-            setUser(profile);
-            router.replace(profile.role === "admin" ? "/(admin)/dashboard" : "/(user)/dashboard");
-          })
-          .catch((e: any) => {
-            setGoogleError(e?.message ?? "Google Sign-In failed. Please try again.");
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-          })
-          .finally(() => setGoogleLoading(false));
-      } else {
-        // No id_token — try access_token path
-        const accessToken = response.authentication?.accessToken ?? (response.params as any)?.access_token;
-        if (accessToken) {
-          const credential = GoogleAuthProvider.credential(null, accessToken);
-          signInWithCredential(auth, credential)
-            .then((result) => buildGoogleProfile(result.user))
-            .then((profile) => {
-              setUser(profile);
-              router.replace(profile.role === "admin" ? "/(admin)/dashboard" : "/(user)/dashboard");
-            })
-            .catch((e: any) => {
-              setGoogleError(e?.message ?? "Google Sign-In failed. Please try again.");
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-            })
-            .finally(() => setGoogleLoading(false));
-        } else {
-          setGoogleError("Google Sign-In failed. No token received.");
-          setGoogleLoading(false);
-        }
-      }
-    } else if (response.type === "error") {
-      setGoogleError("Google Sign-In failed. Please try again.");
-      setGoogleLoading(false);
-    } else if (response.type === "cancel" || response.type === "dismiss") {
-      setGoogleError("Sign-in was cancelled. Please try again.");
-      setGoogleLoading(false);
-    }
-  }, [response]);
 
   const handleLogin = async () => {
     if (!email.trim() || !password) {
@@ -109,51 +45,38 @@ export default function LoginScreen() {
     setError("");
     setLoading(true);
     try {
-      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
       const profile = await signIn(email.trim(), password);
       setUser(profile);
       router.replace(profile.role === "admin" ? "/(admin)/dashboard" : "/(user)/dashboard");
     } catch (e: any) {
       setError(e?.message ?? "Login failed. Please try again.");
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
     } finally {
       setLoading(false);
     }
   };
 
   const handleGoogleSignIn = async () => {
+    if (Platform.OS !== "web") {
+      setGoogleError(
+        "Google Sign-In is only available on the web version. Please use Email login on mobile, or open the app in a browser."
+      );
+      return;
+    }
     setGoogleError("");
     setGoogleLoading(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-
-    if (Platform.OS === "web") {
-      // Web: Firebase popup/redirect flow
-      try {
-        const profile = await signInWithGoogle();
-        setUser(profile);
-        router.replace(profile.role === "admin" ? "/(admin)/dashboard" : "/(user)/dashboard");
-      } catch (e: any) {
-        setGoogleError(e?.message ?? "Google Sign-In failed. Please try again.");
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      } finally {
-        setGoogleLoading(false);
-      }
-      return;
-    }
-
-    // Native: use expo-auth-session
-    if (!GOOGLE_WEB_CLIENT_ID) {
-      setGoogleError("Google Sign-In on mobile requires setup. Please contact the app administrator or use Email login.");
-      setGoogleLoading(false);
-      return;
-    }
-
-    // promptAsync will open the browser; response handled in useEffect above
-    const result = await promptAsync();
-    if (!result || result.type === "cancel" || result.type === "dismiss") {
+    try {
+      const profile = await signInWithGoogle();
+      setUser(profile);
+      router.replace(profile.role === "admin" ? "/(admin)/dashboard" : "/(user)/dashboard");
+    } catch (e: any) {
+      setGoogleError(e?.message ?? "Google Sign-In failed. Please try again.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+    } finally {
       setGoogleLoading(false);
     }
-    // If success, useEffect handles the rest and clears loading
   };
 
   return (
@@ -300,12 +223,21 @@ export default function LoginScreen() {
                 </View>
               ) : null}
 
-              <View style={[styles.googleInfo, { backgroundColor: GREEN + "12", borderColor: GREEN + "30" }]}>
-                <Feather name="info" size={14} color={GREEN} />
-                <Text style={[styles.googleInfoText, { color: GREEN }]}>
-                  Use your Google account to sign in instantly. If it's your first time, an account will be created automatically.
-                </Text>
-              </View>
+              {Platform.OS !== "web" ? (
+                <View style={[styles.infoBox, { backgroundColor: "#FFF3CD18", borderColor: "#FFC10740" }]}>
+                  <Feather name="smartphone" size={14} color="#B45309" />
+                  <Text style={[styles.infoText, { color: "#B45309" }]}>
+                    Google Sign-In is available on the web version of this app. On mobile, please use your Email and Password to sign in.
+                  </Text>
+                </View>
+              ) : (
+                <View style={[styles.googleInfo, { backgroundColor: GREEN + "12", borderColor: GREEN + "30" }]}>
+                  <Feather name="info" size={14} color={GREEN} />
+                  <Text style={[styles.googleInfoText, { color: GREEN }]}>
+                    Use your Google account to sign in instantly. If it's your first time, an account will be created automatically.
+                  </Text>
+                </View>
+              )}
 
               <TouchableOpacity
                 style={[
@@ -326,6 +258,18 @@ export default function LoginScreen() {
                   </>
                 )}
               </TouchableOpacity>
+
+              {Platform.OS !== "web" && (
+                <TouchableOpacity
+                  onPress={() => { setTab("email"); setGoogleError(""); }}
+                  style={styles.switchToEmailBtn}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.switchToEmailText, { color: GREEN }]}>
+                    Switch to Email Login
+                  </Text>
+                </TouchableOpacity>
+              )}
             </>
           )}
 
@@ -392,6 +336,8 @@ const styles = StyleSheet.create({
   tabText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
   errorBox: { flexDirection: "row", alignItems: "flex-start", gap: 8, padding: 12, borderRadius: 10, borderWidth: 1 },
   errorText: { fontSize: 13, fontFamily: "Inter_500Medium", flex: 1, lineHeight: 18 },
+  infoBox: { flexDirection: "row", alignItems: "flex-start", gap: 8, padding: 12, borderRadius: 12, borderWidth: 1 },
+  infoText: { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 18 },
   googleInfo: { flexDirection: "row", alignItems: "flex-start", gap: 8, padding: 12, borderRadius: 12, borderWidth: 1 },
   googleInfoText: { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 18 },
   fieldGroup: { gap: 7 },
@@ -412,6 +358,8 @@ const styles = StyleSheet.create({
     shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 2,
   },
   googleBtnText: { fontSize: 16, fontFamily: "Inter_600SemiBold" },
+  switchToEmailBtn: { alignItems: "center", paddingVertical: 8 },
+  switchToEmailText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
   divider: { flexDirection: "row", alignItems: "center", gap: 12 },
   dividerLine: { flex: 1, height: 1 },
   dividerText: { fontSize: 13, fontFamily: "Inter_400Regular" },
