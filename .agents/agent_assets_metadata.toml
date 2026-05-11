@@ -1,8 +1,13 @@
 uploads = []
-outputs = []
 
 [[generated]]
 id = "Z_ixWvIzaW_UDgTGFYChw"
 uri = "file://artifacts/loan-tracker/assets/images/icon.png"
 type = "image"
 title = "generated_image"
+
+[[outputs]]
+id = "pbi_uRvyCo1Frj2y4xl68"
+uri = "file://APK_BUILD_GUIDE.md"
+type = "text"
+title = "APK Build Guide — LoanTracker"

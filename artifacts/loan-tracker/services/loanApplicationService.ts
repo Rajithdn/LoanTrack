@@ -9,6 +9,8 @@ import {
   orderBy,
 } from "firebase/firestore";
 import { db } from "./firebase";
+import { sendNotification } from "./notificationService";
+import { sendPushNotification, getAdminPushTokens, getPushToken } from "./pushNotificationService";
 
 export interface LoanApplication {
   id: string;
@@ -23,6 +25,17 @@ export interface LoanApplication {
   submittedAt: string;
   reviewedAt?: string;
   reviewNote?: string;
+}
+
+async function getAdminUserIds(): Promise<string[]> {
+  try {
+    const snap = await getDocs(
+      query(collection(db, "users"), where("role", "==", "admin"))
+    );
+    return snap.docs.map((d) => d.id);
+  } catch {
+    return [];
+  }
 }
 
 export async function submitLoanApplication(
@@ -46,7 +59,30 @@ export async function submitLoanApplication(
     submittedAt: new Date().toISOString(),
   };
   const ref = await addDoc(collection(db, "loanApplications"), app);
-  return { id: ref.id, ...app };
+  const newApp = { id: ref.id, ...app };
+
+  // Notify all admins — in-app + push
+  try {
+    const adminIds = await getAdminUserIds();
+    const notifMsg = `New loan application from ${userName} — ₹${amount.toLocaleString("en-IN")} for ${purpose}.`;
+
+    await Promise.all(
+      adminIds.map((adminId) =>
+        sendNotification(adminId, notifMsg, "info").catch(() => {})
+      )
+    );
+
+    const adminTokens = await getAdminPushTokens();
+    if (adminTokens.length > 0) {
+      await sendPushNotification(adminTokens, {
+        title: "📋 New Loan Application",
+        body: `${userName} has applied for ₹${amount.toLocaleString("en-IN")} (${purpose}). Tap to review.`,
+        data: { type: "new_application", screen: "/(admin)/loans" },
+      }).catch(() => {});
+    }
+  } catch {}
+
+  return newApp;
 }
 
 export async function getAllApplications(): Promise<LoanApplication[]> {
@@ -67,6 +103,9 @@ export async function getApplicationsByUser(userId: string): Promise<LoanApplica
 
 export async function reviewApplication(
   applicationId: string,
+  userId: string,
+  userName: string,
+  amount: number,
   status: "approved" | "rejected",
   reviewNote?: string
 ): Promise<void> {
@@ -75,4 +114,27 @@ export async function reviewApplication(
     reviewNote: reviewNote ?? "",
     reviewedAt: new Date().toISOString(),
   });
+
+  // Send in-app notification to the user
+  try {
+    const isApproved = status === "approved";
+    const noteStr = reviewNote ? ` Note: ${reviewNote}` : "";
+    const inAppMsg = isApproved
+      ? `Your loan application for ₹${amount.toLocaleString("en-IN")} has been approved!${noteStr}`
+      : `Your loan application for ₹${amount.toLocaleString("en-IN")} was not approved.${noteStr}`;
+
+    await sendNotification(userId, inAppMsg, isApproved ? "info" : "alert").catch(() => {});
+
+    // Push notification to user's device
+    const userToken = await getPushToken(userId).catch(() => null);
+    if (userToken) {
+      await sendPushNotification([userToken], {
+        title: isApproved ? "✅ Loan Application Approved!" : "❌ Loan Application Update",
+        body: isApproved
+          ? `Your application for ₹${amount.toLocaleString("en-IN")} was approved. The admin will set up your loan.`
+          : `Your application for ₹${amount.toLocaleString("en-IN")} was not approved.${noteStr}`,
+        data: { type: "application_reviewed", status, screen: "/(user)/apply" },
+      }).catch(() => {});
+    }
+  } catch {}
 }

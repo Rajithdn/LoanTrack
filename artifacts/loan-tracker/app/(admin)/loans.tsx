@@ -67,8 +67,10 @@ export default function LoansScreen() {
   });
 
   const reviewMutation = useMutation({
-    mutationFn: ({ id, status, note }: { id: string; status: "approved" | "rejected"; note: string }) =>
-      reviewApplication(id, status, note),
+    mutationFn: ({ id, status, note }: { id: string; status: "approved" | "rejected"; note: string }) => {
+      if (!reviewModal) return Promise.resolve();
+      return reviewApplication(id, reviewModal.userId, reviewModal.userName, reviewModal.amount, status, note);
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["applications"] });
       setReviewModal(null);
