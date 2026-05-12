@@ -18,6 +18,8 @@ import * as Haptics from "expo-haptics";
 import { useColors } from "@/hooks/useColors";
 import { getAllUsers, addUser, updateUser, deleteUser } from "@/services/userService";
 import { getLoansByUser } from "@/services/loanService";
+import { getPaymentsByUser } from "@/services/paymentService";
+import { downloadAdminBorrowerReport } from "@/services/statementService";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { UserProfile } from "@/services/authService";
 import type { Loan } from "@/services/loanService";
@@ -36,9 +38,18 @@ function BorrowerDetailModal({
   onClose: () => void;
   colors: any;
 }) {
+  const [reportLoading, setReportLoading] = React.useState(false);
+  const [reportError, setReportError] = React.useState<string | null>(null);
+
   const { data: loans = [], isLoading } = useQuery({
     queryKey: ["loans", user?.id],
     queryFn: () => getLoansByUser(user!.id),
+    enabled: !!user,
+  });
+
+  const { data: payments = [] } = useQuery({
+    queryKey: ["payments", user?.id],
+    queryFn: () => getPaymentsByUser(user!.id),
     enabled: !!user,
   });
 
@@ -49,6 +60,18 @@ function BorrowerDetailModal({
   const totalBorrowed = loans.reduce((s, l) => s + l.amount, 0);
   const totalPaid = loans.reduce((s, l) => s + l.paidAmount, 0);
   const totalPending = loans.reduce((s, l) => s + l.pendingAmount, 0);
+
+  const handleDownloadReport = async () => {
+    setReportError(null);
+    setReportLoading(true);
+    try {
+      await downloadAdminBorrowerReport(user, loans, payments);
+    } catch (e: any) {
+      setReportError(e?.message ?? "Failed to generate report.");
+    } finally {
+      setReportLoading(false);
+    }
+  };
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -186,6 +209,49 @@ function BorrowerDetailModal({
                 </Text>
               </View>
             ))
+          )}
+
+          {/* Download Full Report */}
+          {loans.length > 0 && (
+            <View style={detailStyles.reportSection}>
+              <View style={[detailStyles.reportInfo, { backgroundColor: colors.muted, borderColor: colors.border }]}>
+                <Feather name="info" size={14} color={colors.mutedForeground} />
+                <Text style={[detailStyles.reportInfoText, { color: colors.mutedForeground }]}>
+                  The report includes all {loans.length} loan{loans.length !== 1 ? "s" : ""}, complete payment history, and each EMI schedule — in one PDF.
+                </Text>
+              </View>
+              {reportError ? (
+                <View style={[detailStyles.reportErrorBox, { backgroundColor: colors.destructive + "12", borderColor: colors.destructive + "30" }]}>
+                  <Feather name="alert-circle" size={13} color={colors.destructive} />
+                  <Text style={[detailStyles.reportErrorText, { color: colors.destructive }]}>{reportError}</Text>
+                </View>
+              ) : null}
+              <TouchableOpacity
+                style={[
+                  detailStyles.reportBtn,
+                  { backgroundColor: reportLoading ? colors.muted : "#1E293B" },
+                ]}
+                onPress={handleDownloadReport}
+                disabled={reportLoading}
+                activeOpacity={0.85}
+              >
+                {reportLoading ? (
+                  <>
+                    <ActivityIndicator size="small" color={colors.mutedForeground} />
+                    <Text style={[detailStyles.reportBtnText, { color: colors.mutedForeground }]}>
+                      Generating Report…
+                    </Text>
+                  </>
+                ) : (
+                  <>
+                    <Feather name="download" size={16} color="#fff" />
+                    <Text style={[detailStyles.reportBtnText, { color: "#fff" }]}>
+                      Download Full Borrower Report
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
           )}
         </ScrollView>
       </View>
@@ -656,4 +722,20 @@ const detailStyles = StyleSheet.create({
   progressBg: { height: 6, borderRadius: 3, overflow: "hidden" },
   progressFill: { height: 6, borderRadius: 3 },
   progressText: { fontSize: 11, fontFamily: "Inter_400Regular", textAlign: "right" },
+  reportSection: { marginTop: 6, gap: 12 },
+  reportInfo: {
+    flexDirection: "row", alignItems: "flex-start", gap: 10,
+    padding: 13, borderRadius: 12, borderWidth: 1,
+  },
+  reportInfoText: { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 18 },
+  reportErrorBox: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    padding: 12, borderRadius: 10, borderWidth: 1,
+  },
+  reportErrorText: { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular" },
+  reportBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center",
+    gap: 8, paddingVertical: 14, borderRadius: 14,
+  },
+  reportBtnText: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
 });
