@@ -7,7 +7,7 @@ module.exports = {
     icon: "./assets/images/icon.png",
     scheme: "loan-tracker",
     userInterfaceStyle: "automatic",
-    newArchEnabled: false,
+    newArchEnabled: true,
     splash: {
       image: "./assets/images/icon.png",
       resizeMode: "contain",
