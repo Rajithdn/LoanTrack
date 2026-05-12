@@ -46,9 +46,6 @@ module.exports = {
       reactCompiler: true,
     },
     extra: {
-      eas: {
-        projectId: "8d751ed9-75e0-4eef-b4d7-4bd9c33ad15d",
-      },
       // Baked-in Firebase config — guaranteed available in all build types
       firebaseApiKey:            process.env.EXPO_PUBLIC_FIREBASE_API_KEY            ?? "AIzaSyDK6PP3uRu6zB6DNPIe4vhM2zS0cd__D1c",
       firebaseAuthDomain:        process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN        ?? "loantrackerapp-49abf.firebaseapp.com",
