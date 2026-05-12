@@ -18,7 +18,6 @@ module.exports = {
     },
     android: {
       package: "com.rajith07.loantracker",
-      googleServicesFile: "./google-services.json",
     },
     web: {
       favicon: "./assets/images/icon.png",
@@ -46,6 +45,9 @@ module.exports = {
       reactCompiler: true,
     },
     extra: {
+      eas: {
+        projectId: "9d551df5-4555-453b-ba43-dcaa80ffe783",
+      },
       // Baked-in Firebase config — guaranteed available in all build types
       firebaseApiKey:            process.env.EXPO_PUBLIC_FIREBASE_API_KEY            ?? "AIzaSyDK6PP3uRu6zB6DNPIe4vhM2zS0cd__D1c",
       firebaseAuthDomain:        process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN        ?? "loantrackerapp-49abf.firebaseapp.com",

@@ -68,6 +68,13 @@ export default function UserLayout() {
         }}
       />
       <Tabs.Screen
+        name="statement"
+        options={{
+          title: "Statement",
+          tabBarIcon: ({ color }) => <Feather name="file-text" size={22} color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="apply"
         options={{
           title: "Apply",
