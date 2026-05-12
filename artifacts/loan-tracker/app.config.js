@@ -7,7 +7,7 @@ module.exports = {
     icon: "./assets/images/icon.png",
     scheme: "loan-tracker",
     userInterfaceStyle: "automatic",
-    newArchEnabled: true,
+    newArchEnabled: false,
     splash: {
       image: "./assets/images/icon.png",
       resizeMode: "contain",
@@ -31,14 +31,6 @@ module.exports = {
       ],
       "expo-font",
       "expo-web-browser",
-      [
-        "expo-notifications",
-        {
-          icon: "./assets/images/icon.png",
-          color: "#00A86B",
-          sounds: [],
-        },
-      ],
     ],
     experiments: {
       typedRoutes: true,
