@@ -1,6 +1,6 @@
 kind = "mobile"
-previewPath = "/"
-title = "Loan Tracker"
+previewPath = "/mobile/"
+title = "Loan Tracker (Mobile)"
 version = "1.0.0"
 id = "artifacts/loan-tracker"
 router = "expo-domain"
@@ -12,7 +12,7 @@ version = "1.0.0"
 [[services]]
 ensurePreviewReachable = "/status"
 name = "expo"
-paths = [ "/" ]
+paths = [ "/mobile/" ]
 localPort = 20782
 
 [services.development]
@@ -24,4 +24,4 @@ run = [ "pnpm", "--filter", "@workspace/loan-tracker", "run", "serve" ]
 
 [services.env]
 PORT = "20782"
-BASE_PATH = "/"
+BASE_PATH = "/mobile/"

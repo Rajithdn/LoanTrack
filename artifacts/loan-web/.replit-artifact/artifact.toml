@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "LoanTracker Web"
+version = "1.0.0"
+id = "artifacts/loan-web"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 23256
+
+[services.development]
+run = "pnpm --filter @workspace/loan-web run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/loan-web", "run", "build" ]
+publicDir = "artifacts/loan-web/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "23256"
+BASE_PATH = "/"
