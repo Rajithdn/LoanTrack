@@ -1,0 +1,11 @@
+{
+  "buildCommand": "cd artifacts/loan-tracker && pnpm exec expo export --platform web",
+  "outputDirectory": "artifacts/loan-tracker/dist",
+  "installCommand": "pnpm install --no-frozen-lockfile",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "buildCommand": "pnpm exec expo export --platform web",
+  "outputDirectory": "dist",
+  "installCommand": "pnpm install --no-frozen-lockfile",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
